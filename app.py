@@ -1,13 +1,15 @@
 # from pairreader.agents import PairReader
 from pairreader.docparser import DocParser
 from pairreader.vectorestore import VectorStore
+from pairreader.agents import PairReaderAgent
 import logging
 import chainlit as cl
-
 
 logger = logging.getLogger(__name__)
 docparser = DocParser()
 vs = VectorStore()
+pairreader = PairReaderAgent(vs)
+
 commands = [
     {
         "id": "Use",
@@ -25,19 +27,6 @@ commands = [
         "icon": "/public/books.png",
     }
 ]
-
-
-@cl.set_starters
-async def set_starters():
-    return [
-        cl.Starter(
-            command=command["id"],
-            label=command["description"],
-            icon=command["icon"],
-            message="",
-        )
-        for command in commands
-    ]
 
 
 @cl.set_starters
@@ -88,14 +77,6 @@ async def on_message(msg: cl.Message):
         logger.info(f"Files ready: {[f.name for f in files]}")
 
     else:
-        logger.info(f"Query: {msg.content}")
-        results = vs.query(query_texts=[msg.content], n_results=3)
-        logger.info(f"Results out of the vector store:\n{results}\n")
-        retrieved_chunks = results["documents"][0]
-        retrieved_metadatas = results["metadatas"][0]
-        await cl.Message(
-            content=(
-                "Retrieved from vs:\n" + 
-                "\n\n".join(retrieved_chunks)
-            )
-        ).send()
+        state = pairreader({"user_query": msg.content})
+        logger.info(state["response"])
+        await cl.Message(content=state["response"].content).send()
