@@ -78,5 +78,4 @@ async def on_message(msg: cl.Message):
 
     else:
         state = pairreader({"user_query": msg.content})
-        logger.info(state["response"])
         await cl.Message(content=state["response"].content).send()

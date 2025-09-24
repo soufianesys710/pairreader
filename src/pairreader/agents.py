@@ -8,7 +8,7 @@ class PairReaderAgent:
     def __init__(self, vs: VectorStore):
         self.vs = vs
         self.graph_builder = StateGraph(PairReaderState)
-        self.graph_builder.add_node("query_optimizer", QueryOptimizer())
+        self.graph_builder.add_node("query_optimizer", QueryOptimizer(query_decomposition=True, query_expansion=True))
         self.graph_builder.add_node("info_retriever", InfoRetriever(vs))
         self.graph_builder.add_node("info_summarizer", InfoSummarizer())
         self.graph_builder.add_edge(START, "query_optimizer")
