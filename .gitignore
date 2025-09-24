@@ -8,6 +8,7 @@ wheels/
 chroma/
 .chainlit/
 .DS_Store
+.vscode/
 
 # Virtual environments
 .venv

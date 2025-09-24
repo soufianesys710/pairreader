@@ -2,68 +2,163 @@ from pairreader.schemas import PairReaderState
 from pairreader.vectorestore import VectorStore
 from langchain.chat_models import init_chat_model
 from langchain_core.messages import AIMessage, SystemMessage, HumanMessage, ToolMessage, AnyMessage
+from typing import List, Optional, Union, Dict, Any
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class QueryOptimizer:
+    """
+    Optimizes user queries for vector store retrieval.
+
+    Expected input state keys:
+        - "user_query": str, the original query from the user.
+
+    Output state keys:
+        - "retrieval_queries": list[str], queries to use for retrieval.
+
+    Features:
+        - query_decomposition: If True, decomposes the query into sub-queries (LLM decides how many).
+        - query_expansion: If True, expands the query for better retrieval.
+        - max_expansion: int, max number of expansion queries to generate (default 10).
+
+    Raises:
+        ValueError: If query_expansion is used without query_decomposition.
+    """
     def __init__(
             self, 
             llm_name: str = "anthropic:claude-3-5-haiku-latest",
             fallback_llm: str = "anthropic:claude-3-7-sonnet-latest",
-            query_decomposition: bool = False, 
-            query_expansion: bool = False
+            query_decomposition: bool = False,
+            query_expansion: bool = False,
+            max_expansion: int = 10
     ):
         self.llm_name = llm_name
         self.query_decomposition = query_decomposition
         self.query_expansion = query_expansion
+        self.max_expansion = max_expansion
         self.llm = (
             init_chat_model(llm_name)
             .with_fallbacks([init_chat_model(fallback_llm)])
         )
+        if self.query_expansion and not self.query_decomposition:
+            raise ValueError("query_expansion can only be used if query_decomposition is True")
 
-    def __call__(self, state: PairReaderState, *args, **kwds):
+    def __call__(self, state: PairReaderState, *args, **kwds) -> Dict[str, List[str]]:
+        """
+        Process and optimize the user query for retrieval.
+
+        Args:
+            state: Current state containing user_query
+
+        Returns:
+            Dictionary containing optimized retrieval queries
+        """
+        logger.info("QueryOptimizer:")
+        logger.info(f"User query: {state['user_query']}")
+        subqueries = [state["user_query"]]
         if self.query_decomposition:
-            # subqueries_msg = self.llm.invoke([
-            #     SystemMessage(
-            #         "Your query retrieval optimizer for vectore store semantic search purpuse, " \
-            #         "you take a query from the user, you decompose into simpler, smaller, more vector store suited sub-queries" \
-            #         "User Query:"
-            #     ),
-            #     HumanMessage(state["user_query"])
-            # ])
-            pass
-        if self.query_expansion:
-            pass
-        # identity function
-        return {"retrieval_queries": [state["user_query"]]}
+            decomposition_prompt = [
+                SystemMessage(
+                    "You are a query retrieval optimizer for vector store semantic search. "
+                    "Decompose the user's query into simpler, smaller sub-queries better suited for vector store search. "
+                    "Decide yourself how many sub-queries are optimal for retrieval. "
+                    "Each sub-query should be on a new line for correct parsing using split('\\n'). "
+                    "User Query:"
+                ),
+                HumanMessage(state["user_query"])
+            ]
+            subqueries_msg: AIMessage = self.llm.invoke(decomposition_prompt)
+            subqueries += [s.strip() for s in subqueries_msg.content.split("\n") if s.strip()]
+            logger.info(f"Subqueries after decomposition: {subqueries}")
+        if self.query_expansion and subqueries:
+            expansion_prompt = [
+                SystemMessage(
+                    "You are a query retrieval optimizer for vector store semantic search. "
+                    f"Use the following sub-queries to generate up to {self.max_expansion} additional semantically and synonymously similar queries for improved retrieval. "
+                    "Each sub-query should be on a new line for correct parsing using split('\\n'). "
+                    f"Do not generate more than {self.max_expansion} expansion queries. "
+                    "Sub-queries:"
+                ),
+                HumanMessage("\n\n".join(subqueries))
+            ]
+            expansion_msg: AIMessage = self.llm.invoke(expansion_prompt)
+            subqueries += [s.strip() for s in expansion_msg.content.split("\n") if s.strip()]
+            subqueries = list(set(subqueries))
+            logger.info(f"Subqueries after expansion: {subqueries}")
+        return {"retrieval_queries": subqueries}
     
 
 class InfoRetriever:
-    def __init__(self, vs: VectorStore, n_results=10):
+    """
+    Retrieves relevant information from the vector store based on optimized queries.
+
+    Args:
+        vs: VectorStore instance for document retrieval
+        n_results: Maximum number of documents to retrieve (default: 10)
+
+    Returns:
+        Dictionary containing retrieved documents and their metadata
+    """
+    def __init__(self, vs: VectorStore, n_results: int = 10):
         self.vs = vs
         self.n_results = n_results
-    def __call__(self,state: PairReaderState , *args, **kwds):
+
+    def __call__(self, state: PairReaderState, *args, **kwds) -> Dict[str, Any]:
+        """
+        Retrieve documents based on optimized queries.
+
+        Args:
+            state: Current state containing retrieval_queries
+
+        Returns:
+            Dictionary with retrieved documents and metadata
+        """
+        logger.info("InfoRetriever")
+        logger.info(f"Retrieval queries: {state['retrieval_queries']}")
         results = self.vs.query(query_texts=state["retrieval_queries"], n_results=self.n_results)
         state_update = {
             "retrieved_documents": results["documents"][0],
             "retrieved_metadatas": results["metadatas"][0]
         }
+        logger.info(f"VectorStore query resulted in {len(state_update['retrieved_documents'])} documents")
         return state_update
 
 
 class InfoSummarizer:
+    """
+    Summarizes retrieved information based on the user's original query.
+
+    Args:
+        llm_name: Name of the language model to use for summarization
+    """
     def __init__(self, llm_name: str = "anthropic:claude-3-5-haiku-latest"):
         self.llm_name = llm_name
         self.llm = init_chat_model(llm_name)
-    def __call__(self, state: PairReaderState, *args, **kwds):
+
+    def __call__(self, state: PairReaderState, *args, **kwds) -> Dict[str, Any]:
+        """
+        Generate a summary of retrieved documents based on the user query.
+
+        Args:
+            state: Current state containing user_query and retrieved_documents
+
+        Returns:
+            Dictionary containing the generated summary
+        """
+        logger.info(f"InfoSummarizer:")
         msgs = [
             SystemMessage(
-                "You're a helpful summarization assitant, summrize the information retreived from a vector store according to user query" \
-                "User query:"
+                "You are a helpful summarization assistant. Create a comprehensive summary "
+                "of the retrieved information that directly addresses the user's query. "
+                "Focus on relevant information and maintain accuracy."
             ),
-            HumanMessage(state["user_query"]),
-            HumanMessage("Retried information"),
+            HumanMessage(f"User Query: {state['user_query']}"),
+            HumanMessage("Retrieved Information:"),
             HumanMessage("\n\n".join(state["retrieved_documents"]))
         ]
         summary = self.llm.invoke(msgs)
+        logger.info(f"InfoSummarizer response: {summary.content}")
         return {"response": summary}
         
