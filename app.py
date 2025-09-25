@@ -77,5 +77,8 @@ async def on_message(msg: cl.Message):
         logger.info(f"Files ready: {[f.name for f in files]}")
 
     else:
-        state = pairreader({"user_query": msg.content})
-        await cl.Message(content=state["response"].content).send()
+        final_summary_msg = cl.Message(content="")
+        for aichunk, metadata in pairreader.stream({"user_query": msg.content}, stream_mode="messages"):
+            if aichunk.content and metadata["langgraph_node"] == "info_summarizer":
+                await final_summary_msg.stream_token(aichunk.content)
+        await final_summary_msg.update()

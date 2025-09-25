@@ -2,6 +2,7 @@ from pairreader.schemas import PairReaderState
 from pairreader.vectorestore import VectorStore
 from langchain.chat_models import init_chat_model
 from langchain_core.messages import AIMessage, SystemMessage, HumanMessage, ToolMessage, AnyMessage
+from langgraph.config import get_stream_writer
 from typing import List, Optional, Union, Dict, Any
 import logging
 
@@ -55,6 +56,7 @@ class QueryOptimizer:
         Returns:
             Dictionary containing optimized retrieval queries
         """
+        get_stream_writer()(self.__class__.__name__)
         logger.info("QueryOptimizer:")
         logger.info(f"User query: {state['user_query']}")
         subqueries = [state["user_query"]]
@@ -115,6 +117,7 @@ class InfoRetriever:
         Returns:
             Dictionary with retrieved documents and metadata
         """
+        get_stream_writer()(self.__class__.__name__)
         logger.info("InfoRetriever")
         logger.info(f"Retrieval queries: {state['retrieval_queries']}")
         results = self.vs.query(query_texts=state["retrieval_queries"], n_results=self.n_results)
@@ -147,6 +150,7 @@ class InfoSummarizer:
         Returns:
             Dictionary containing the generated summary
         """
+        get_stream_writer()(self.__class__.__name__)
         logger.info(f"InfoSummarizer:")
         msgs = [
             SystemMessage(
