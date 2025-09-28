@@ -43,7 +43,12 @@ async def on_message(msg: cl.Message):
         "user_query": msg.content,
     }
     final_summary_msg = cl.Message(content="")
-    async for aichunk, metadata in pairreader.workflow.astream(state, stream_mode="messages"):
-        if aichunk.content and metadata.get("langgraph_node") == "info_summarizer":
-            await final_summary_msg.stream_token(aichunk.content)
+    async for mode, data  in pairreader.workflow.astream(state, stream_mode=["messages", "updates"]):
+        if mode == "updates":
+            if "__interrupt__" in data:
+                await cl.Message(content=data["__interrupt__"][0].value).send()
+        elif mode == "messages":
+            aichunk, metadata = data
+            if aichunk.content and metadata.get("langgraph_node") == "info_summarizer":
+                await final_summary_msg.stream_token(aichunk.content)
     await final_summary_msg.update()

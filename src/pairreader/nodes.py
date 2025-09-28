@@ -36,21 +36,26 @@ class ChainlitCommandHandler:
                 max_size_mb=10,
                 max_files=5,
             ).send()
-            logger.info(f"Files uploaded: {[f.name for f in files]}")
-            for f in files:
-                logger.info(f"Parsing file: {f.name}")
-                self.docparser.parse(f.path)
-                logger.info(f"Chunking file: {f.name}")
-                chunks = self.docparser.get_chunks()
-                logger.info(f"Ingesting chunks to the vector store, file: {f.name}")
-                metadatas = [{"fname": f.name}] * len(chunks)
-                self.vectorstore.ingest_chunks(chunks, metadatas)
-            logger.info(f"Files ready: {[f.name for f in files]}")
-            # files uploaded and parsed, ask for a user query
-            res = await cl.AskUserMessage(
-                content=f"Files uploaded: {[f.name for f in files]}, the knowledge base is ready. What do you want to know?",
-            ).send()
-            return {"user_query": res["output"]}
+            if files is None:
+                interrupt(
+                    f"You haven't uploaded any files in the 60s following your {chainlit_command} command!"
+                    "You can continue to use the your ciurrent knowledge base, or resend a Create or Update command described in the toolbox"
+                )
+            else:
+                logger.info(f"Files uploaded: {[f.name for f in files]}")
+                for f in files:
+                    logger.info(f"Parsing file: {f.name}")
+                    self.docparser.parse(f.path)
+                    logger.info(f"Chunking file: {f.name}")
+                    chunks = self.docparser.get_chunks()
+                    logger.info(f"Ingesting chunks to the vector store, file: {f.name}")
+                    metadatas = [{"fname": f.name}] * len(chunks)
+                    self.vectorstore.ingest_chunks(chunks, metadatas)
+                logger.info(f"Files ready: {[f.name for f in files]}")
+                # files uploaded and parsed, ask for a user query
+                interrupt(
+                    f"Files uploaded: {[f.name for f in files]}, the knowledge base is ready. What do you want to know?"
+                )
         # the user doesn't send a command, rather he should've sent a message, don't update the state
         else:
             return {}
@@ -149,6 +154,7 @@ class ChainlitHumanReviser:
         ).send()
         # if the user doesn(t answer at timeout
         if res is None:
+            await cl.Message("You haven't revised the LLM genrated subqueries in the following 60s, we're using them as they are!").send()
             return {"human_subqueries": state["llm_subqueries"]}
         else:
             return {"human_subqueries": res["output"].split("\n")}
