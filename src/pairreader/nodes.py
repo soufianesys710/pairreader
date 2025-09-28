@@ -12,7 +12,10 @@ import chainlit as cl
 class ChainlitCommandHandler:
     """
     Handles Chainlit commands (Create, Update) and file upload logic.
-    Updates state with chainlit_command and processes file ingestion.
+
+    - Updates state with chainlit_command and processes file ingestion.
+    - Prompts user to upload files and ingests them into the vector store.
+    - Interrupts flow if no files are uploaded within timeout.
     """
     def __init__(self, docparser: DocParser, vectorstore: VectorStore):
         self.docparser = docparser
@@ -22,6 +25,7 @@ class ChainlitCommandHandler:
     @langgraph_stream_verbosity
     @cl.step(type="ChainlitCommandHandler", name="ChainlitCommandHandler")
     async def __call__(self, state: PairReaderState, *args, **kwds):
+        """Handle Chainlit commands and file uploads."""
         # if the user sends a command
         if (chainlit_command := state.get("chainlit_command")):
             if chainlit_command == "Create":
@@ -93,7 +97,7 @@ class QueryOptimizer:
     @langgraph_stream_verbosity
     @cl.step(type="QueryOptimizer", name="QueryOptimizer")
     async def __call__(self, state: PairReaderState, *args, **kwds) -> Dict[str, List[str]]:
-        """Process and optimize the user query for retrieval."""
+        """Optimize user query for retrieval."""
         subqueries = [state["user_query"]]
         if self.query_decomposition:
             decomposition_prompt = [
@@ -126,7 +130,12 @@ class QueryOptimizer:
     
 
 class ChainlitHumanReviser:
-    """"""
+    """
+    Allows the user to revise LLM-generated subqueries before retrieval.
+
+    - Prompts user to review and edit subqueries.
+    - Uses original subqueries if no user input is received within timeout.
+    """
     def __init__(self):
         pass
 
@@ -134,6 +143,7 @@ class ChainlitHumanReviser:
     @langgraph_stream_verbosity
     @cl.step(type="ChainlitHumanReviser", name="ChainlitHumanReviser")
     async def __call__(self, state: PairReaderState, *args, **kwds) -> Dict[str, Any]:
+        """Request user revision of LLM subqueries."""
         res = await cl.AskUserMessage(
             content=f"Please revise the llm genrated subqueries:\n{'\n'.join(state['llm_subqueries'])}"
         ).send()
@@ -149,12 +159,8 @@ class InfoRetriever:
     """
     Retrieves relevant information from the vector store based on optimized queries.
 
-    Args:
-        vectorstore: VectorStore instance for document retrieval
-        n_results: Maximum number of documents to retrieve (default: 10)
-
-    Returns:
-        Dictionary containing retrieved documents and their metadata
+    - Uses human-revised subqueries to query the vector store.
+    - Returns retrieved documents and their metadata for summarization.
     """
     def __init__(self, vectorstore: VectorStore, n_results: int = 10):
         self.vectorstore = vectorstore
@@ -164,7 +170,7 @@ class InfoRetriever:
     @langgraph_stream_verbosity
     @cl.step(type="InfoRetriever", name="InfoRetriever")
     async def __call__(self, state: PairReaderState, *args, **kwds) -> Dict[str, Any]:
-        """Retrieve documents based on optimized queries."""
+        """Retrieve documents from vector store."""
         results = self.vectorstore.query(query_texts=state["human_subqueries"], n_results=self.n_results)
         state_update = {
             "retrieved_documents": results["documents"][0],
@@ -188,7 +194,7 @@ class InfoSummarizer:
     @langgraph_stream_verbosity
     @cl.step(type="InfoSummarizer", name="InfoSummarizer")
     async def __call__(self, state: PairReaderState, *args, **kwds) -> Dict[str, Any]:
-        """Generate a summary of retrieved documents based on the user query."""
+        """Summarize retrieved documents for user query."""
         msgs = [
             SystemMessage(
                 "You are a helpful summarization assistant. Create a comprehensive summary "
