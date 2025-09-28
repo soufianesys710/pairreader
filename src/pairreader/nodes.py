@@ -1,15 +1,12 @@
 from pairreader.schemas import PairReaderState
 from pairreader.vectorestore import VectorStore
 from pairreader.docparser import DocParser
+from pairreader.utils import logging_verbosity, langgraph_stream_verbosity
 from langchain.chat_models import init_chat_model
 from langchain_core.messages import AIMessage, SystemMessage, HumanMessage, ToolMessage, AnyMessage
-from langgraph.config import get_stream_writer
 from langgraph.types import interrupt
 from typing import List, Optional, Union, Dict, Any
 import chainlit as cl
-import logging
-
-logger = logging.getLogger(__name__)
 
 
 class ChainlitCommandHandler:
@@ -21,15 +18,14 @@ class ChainlitCommandHandler:
         self.docparser = docparser
         self.vectorstore = vectorstore
 
+    @logging_verbosity
+    @langgraph_stream_verbosity
+    @cl.step(type="ChainlitCommandHandler", name="ChainlitCommandHandler")
     async def __call__(self, state: PairReaderState, *args, **kwds):
         # if the user sends a command
         if (chainlit_command := state.get("chainlit_command")):
             if chainlit_command == "Create":
-                logger.info("Command: Create new knowledge base")
-                logger.info("Flushing knowledge base...")
                 self.vectorstore.flush()
-            elif chainlit_command == "Update":
-                logger.info("Command: Update knowledge base")
             files = await cl.AskFileMessage(
                 content="Please upload your files to help out reading!",
                 accept=["text/plain", "application/pdf"],
@@ -42,16 +38,11 @@ class ChainlitCommandHandler:
                     "You can continue to use the your ciurrent knowledge base, or resend a Create or Update command described in the toolbox"
                 )
             else:
-                logger.info(f"Files uploaded: {[f.name for f in files]}")
                 for f in files:
-                    logger.info(f"Parsing file: {f.name}")
                     self.docparser.parse(f.path)
-                    logger.info(f"Chunking file: {f.name}")
                     chunks = self.docparser.get_chunks()
-                    logger.info(f"Ingesting chunks to the vector store, file: {f.name}")
                     metadatas = [{"fname": f.name}] * len(chunks)
                     self.vectorstore.ingest_chunks(chunks, metadatas)
-                logger.info(f"Files ready: {[f.name for f in files]}")
                 # files uploaded and parsed, ask for a user query
                 interrupt(
                     f"Files uploaded: {[f.name for f in files]}, the knowledge base is ready. What do you want to know?"
@@ -98,19 +89,11 @@ class QueryOptimizer:
         if self.query_expansion and not self.query_decomposition:
             raise ValueError("query_expansion can only be used if query_decomposition is True")
 
-    def __call__(self, state: PairReaderState, *args, **kwds) -> Dict[str, List[str]]:
-        """
-        Process and optimize the user query for retrieval.
-
-        Args:
-            state: Current state containing user_query
-
-        Returns:
-            Dictionary containing optimized retrieval queries
-        """
-        get_stream_writer()(self.__class__.__name__)
-        logger.info("QueryOptimizer:")
-        logger.info(f"User query: {state['user_query']}")
+    @logging_verbosity
+    @langgraph_stream_verbosity
+    @cl.step(type="QueryOptimizer", name="QueryOptimizer")
+    async def __call__(self, state: PairReaderState, *args, **kwds) -> Dict[str, List[str]]:
+        """Process and optimize the user query for retrieval."""
         subqueries = [state["user_query"]]
         if self.query_decomposition:
             decomposition_prompt = [
@@ -125,7 +108,6 @@ class QueryOptimizer:
             ]
             subqueries_msg: AIMessage = self.llm.invoke(decomposition_prompt)
             subqueries += [s.strip() for s in subqueries_msg.content.split("\n") if s.strip()]
-            logger.info(f"Subqueries after decomposition: {subqueries}")
         if self.query_expansion and subqueries:
             expansion_prompt = [
                 SystemMessage(
@@ -140,14 +122,17 @@ class QueryOptimizer:
             expansion_msg: AIMessage = self.llm.invoke(expansion_prompt)
             subqueries += [s.strip() for s in expansion_msg.content.split("\n") if s.strip()]
             subqueries = list(set(subqueries))
-            logger.info(f"Subqueries after expansion: {subqueries}")
         return {"llm_subqueries": subqueries}
     
 
 class ChainlitHumanReviser:
+    """"""
     def __init__(self):
         pass
 
+    @logging_verbosity
+    @langgraph_stream_verbosity
+    @cl.step(type="ChainlitHumanReviser", name="ChainlitHumanReviser")
     async def __call__(self, state: PairReaderState, *args, **kwds) -> Dict[str, Any]:
         res = await cl.AskUserMessage(
             content=f"Please revise the llm genrated subqueries:\n{'\n'.join(state['llm_subqueries'])}"
@@ -158,7 +143,7 @@ class ChainlitHumanReviser:
             return {"human_subqueries": state["llm_subqueries"]}
         else:
             return {"human_subqueries": res["output"].split("\n")}
-    
+
 
 class InfoRetriever:
     """
@@ -175,25 +160,16 @@ class InfoRetriever:
         self.vectorstore = vectorstore
         self.n_results = n_results
 
-    def __call__(self, state: PairReaderState, *args, **kwds) -> Dict[str, Any]:
-        """
-        Retrieve documents based on optimized queries.
-
-        Args:
-            state: Current state containing human_subqueries
-
-        Returns:
-            Dictionary with retrieved documents and metadata
-        """
-        get_stream_writer()(self.__class__.__name__)
-        logger.info("InfoRetriever")
-        logger.info(f"Retrieval queries: {state['human_subqueries']}")
+    @logging_verbosity
+    @langgraph_stream_verbosity
+    @cl.step(type="InfoRetriever", name="InfoRetriever")
+    async def __call__(self, state: PairReaderState, *args, **kwds) -> Dict[str, Any]:
+        """Retrieve documents based on optimized queries."""
         results = self.vectorstore.query(query_texts=state["human_subqueries"], n_results=self.n_results)
         state_update = {
             "retrieved_documents": results["documents"][0],
             "retrieved_metadatas": results["metadatas"][0]
         }
-        logger.info(f"VectorStore query resulted in {len(state_update['retrieved_documents'])} documents")
         return state_update
 
 
@@ -208,18 +184,11 @@ class InfoSummarizer:
         self.llm_name = llm_name
         self.llm = init_chat_model(llm_name)
 
-    def __call__(self, state: PairReaderState, *args, **kwds) -> Dict[str, Any]:
-        """
-        Generate a summary of retrieved documents based on the user query.
-
-        Args:
-            state: Current state containing user_query and retrieved_documents
-
-        Returns:
-            Dictionary containing the generated summary
-        """
-        get_stream_writer()(self.__class__.__name__)
-        logger.info(f"InfoSummarizer:")
+    @logging_verbosity
+    @langgraph_stream_verbosity
+    @cl.step(type="InfoSummarizer", name="InfoSummarizer")
+    async def __call__(self, state: PairReaderState, *args, **kwds) -> Dict[str, Any]:
+        """Generate a summary of retrieved documents based on the user query."""
         msgs = [
             SystemMessage(
                 "You are a helpful summarization assistant. Create a comprehensive summary "
@@ -231,6 +200,5 @@ class InfoSummarizer:
             HumanMessage("\n\n".join(state["retrieved_documents"]))
         ]
         summary = self.llm.invoke(msgs)
-        logger.info(f"InfoSummarizer response: {summary.content}")
         return {"response": summary}
         

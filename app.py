@@ -4,6 +4,7 @@ import chainlit as cl
 
 pairreader = PairReaderAgent()
 
+
 commands = [
     {
         "id": "Update",
