@@ -1,13 +1,59 @@
 from pairreader.schemas import PairReaderState
 from pairreader.vectorestore import VectorStore
+from pairreader.docparser import DocParser
 from langchain.chat_models import init_chat_model
 from langchain_core.messages import AIMessage, SystemMessage, HumanMessage, ToolMessage, AnyMessage
 from langgraph.config import get_stream_writer
+from langgraph.types import interrupt
 from typing import List, Optional, Union, Dict, Any
 import chainlit as cl
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+class ChainlitCommandHandler:
+    """
+    Handles Chainlit commands (Create, Update) and file upload logic.
+    Updates state with chainlit_command and processes file ingestion.
+    """
+    def __init__(self, docparser: DocParser, vectorstore: VectorStore):
+        self.docparser = docparser
+        self.vectorstore = vectorstore
+
+    async def __call__(self, state: PairReaderState, *args, **kwds):
+        # if the user sends a command
+        if (chainlit_command := state.get("chainlit_command")):
+            if chainlit_command == "Create":
+                logger.info("Command: Create new knowledge base")
+                logger.info("Flushing knowledge base...")
+                self.vectorstore.flush()
+            elif chainlit_command == "Update":
+                logger.info("Command: Update knowledge base")
+            files = await cl.AskFileMessage(
+                content="Please upload your files to help out reading!",
+                accept=["text/plain", "application/pdf"],
+                max_size_mb=10,
+                max_files=5,
+            ).send()
+            logger.info(f"Files uploaded: {[f.name for f in files]}")
+            for f in files:
+                logger.info(f"Parsing file: {f.name}")
+                self.docparser.parse(f.path)
+                logger.info(f"Chunking file: {f.name}")
+                chunks = self.docparser.get_chunks()
+                logger.info(f"Ingesting chunks to the vector store, file: {f.name}")
+                metadatas = [{"fname": f.name}] * len(chunks)
+                self.vectorstore.ingest_chunks(chunks, metadatas)
+            logger.info(f"Files ready: {[f.name for f in files]}")
+            # files uploaded and parsed, ask for a user query
+            res = await cl.AskUserMessage(
+                content=f"Files uploaded: {[f.name for f in files]}, the knowledge base is ready. What do you want to know?",
+            ).send()
+            return {"user_query": res["output"]}
+        # the user doesn't send a command, rather he should've sent a message, don't update the state
+        else:
+            return {}
 
 
 class QueryOptimizer:
@@ -93,7 +139,7 @@ class QueryOptimizer:
         return {"llm_subqueries": subqueries}
     
 
-class HumanReviser:
+class ChainlitHumanReviser:
     def __init__(self):
         pass
 
@@ -113,14 +159,14 @@ class InfoRetriever:
     Retrieves relevant information from the vector store based on optimized queries.
 
     Args:
-        vs: VectorStore instance for document retrieval
+        vectorstore: VectorStore instance for document retrieval
         n_results: Maximum number of documents to retrieve (default: 10)
 
     Returns:
         Dictionary containing retrieved documents and their metadata
     """
-    def __init__(self, vs: VectorStore, n_results: int = 10):
-        self.vs = vs
+    def __init__(self, vectorstore: VectorStore, n_results: int = 10):
+        self.vectorstore = vectorstore
         self.n_results = n_results
 
     def __call__(self, state: PairReaderState, *args, **kwds) -> Dict[str, Any]:
@@ -136,7 +182,7 @@ class InfoRetriever:
         get_stream_writer()(self.__class__.__name__)
         logger.info("InfoRetriever")
         logger.info(f"Retrieval queries: {state['human_subqueries']}")
-        results = self.vs.query(query_texts=state["human_subqueries"], n_results=self.n_results)
+        results = self.vectorstore.query(query_texts=state["human_subqueries"], n_results=self.n_results)
         state_update = {
             "retrieved_documents": results["documents"][0],
             "retrieved_metadatas": results["metadatas"][0]
