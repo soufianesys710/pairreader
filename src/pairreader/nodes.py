@@ -4,6 +4,7 @@ from langchain.chat_models import init_chat_model
 from langchain_core.messages import AIMessage, SystemMessage, HumanMessage, ToolMessage, AnyMessage
 from langgraph.config import get_stream_writer
 from typing import List, Optional, Union, Dict, Any
+import chainlit as cl
 import logging
 
 logger = logging.getLogger(__name__)
@@ -17,7 +18,7 @@ class QueryOptimizer:
         - "user_query": str, the original query from the user.
 
     Output state keys:
-        - "retrieval_queries": list[str], queries to use for retrieval.
+        - "llm_subqueries": list[str], queries to use for retrieval.
 
     Features:
         - query_decomposition: If True, decomposes the query into sub-queries (LLM decides how many).
@@ -89,7 +90,22 @@ class QueryOptimizer:
             subqueries += [s.strip() for s in expansion_msg.content.split("\n") if s.strip()]
             subqueries = list(set(subqueries))
             logger.info(f"Subqueries after expansion: {subqueries}")
-        return {"retrieval_queries": subqueries}
+        return {"llm_subqueries": subqueries}
+    
+
+class HumanReviser:
+    def __init__(self):
+        pass
+
+    async def __call__(self, state: PairReaderState, *args, **kwds) -> Dict[str, Any]:
+        res = await cl.AskUserMessage(
+            content=f"Please revise the llm genrated subqueries:\n{'\n'.join(state['llm_subqueries'])}"
+        ).send()
+        # if the user doesn(t answer at timeout
+        if res is None:
+            return {"human_subqueries": state["llm_subqueries"]}
+        else:
+            return {"human_subqueries": res["output"].split("\n")}
     
 
 class InfoRetriever:
@@ -112,15 +128,15 @@ class InfoRetriever:
         Retrieve documents based on optimized queries.
 
         Args:
-            state: Current state containing retrieval_queries
+            state: Current state containing human_subqueries
 
         Returns:
             Dictionary with retrieved documents and metadata
         """
         get_stream_writer()(self.__class__.__name__)
         logger.info("InfoRetriever")
-        logger.info(f"Retrieval queries: {state['retrieval_queries']}")
-        results = self.vs.query(query_texts=state["retrieval_queries"], n_results=self.n_results)
+        logger.info(f"Retrieval queries: {state['human_subqueries']}")
+        results = self.vs.query(query_texts=state["human_subqueries"], n_results=self.n_results)
         state_update = {
             "retrieved_documents": results["documents"][0],
             "retrieved_metadatas": results["metadatas"][0]

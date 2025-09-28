@@ -6,7 +6,8 @@ from typing import Annotated, List, Optional, Dict
 class PairReaderState(TypedDict):
     messages: Annotated[List[AnyMessage], add_messages]
     user_query: Optional[str]
-    retrieval_queries: Optional[List[str]]
+    llm_subqueries: Optional[List[str]]
+    human_subqueries: Optional[List[str]]
     retrieved_documents: Optional[List[str]]
     retrieved_metadatas: Optional[List[Dict]]
     response: Optional[str]
