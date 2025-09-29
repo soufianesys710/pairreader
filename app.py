@@ -121,3 +121,8 @@ async def on_message(msg: cl.Message):
             if aichunk.content and metadata.get("langgraph_node") == "info_summarizer":
                 await final_summary_msg.stream_token(aichunk.content)
     await final_summary_msg.update()
+
+
+if __name__ == "__main__":
+    from chainlit.cli import run_chainlit
+    run_chainlit(__file__)
