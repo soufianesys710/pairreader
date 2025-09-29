@@ -41,3 +41,14 @@ def langgraph_stream_verbosity(func):
 		get_stream_writer()(f"self.__class__.__name__ finished")
 		return result
 	return wrapper
+
+class ParamsMixin:
+    """Set and get params, designed for langgraph graph nodes."""
+    def set_params(self, **params):
+        for k, v in params.items():
+            if hasattr(self, k):
+                setattr(self, k, v)
+
+    def get_params(self):
+        return {key: value for key, value in self.__dict__.items() if not key.startswith("_")}
+
