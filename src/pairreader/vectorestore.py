@@ -64,7 +64,7 @@ class VectorStore:
         query_texts: Optional[List[str]] = None,
         contains: Optional[List[str]] = None,
         not_contains: Optional[List[str]] = None,
-        n_results: int = 10,
+        n_documents: int = 10,
         **kwargs: Any
     ) -> Dict[str, Any]:
         """
@@ -73,7 +73,7 @@ class VectorStore:
             query_texts: List of query strings.
             contains: List of strings that must be contained in the document.
             not_contains: List of strings that must not be contained in the document.
-            n_results: Number of results to return.
+            n_documents: Number of results to return.
             **kwargs: Additional filter arguments for 'where'.
         Returns:
             Query results as a dictionary.
@@ -81,7 +81,7 @@ class VectorStore:
         # Base args
         query_args = {
             "query_texts": query_texts,
-            "n_results": n_results,
+            "n_results": n_documents,
         }
         # conditions
         where_document = [

@@ -10,12 +10,24 @@ class PairReaderAgent:
     def __init__(self, docparser: Optional[DocParser] = None, vectorstore: Optional[VectorStore] = None):
         self.docparser = docparser or DocParser()
         self.vectorstore = vectorstore or VectorStore()
+        self.chainlit_command_handler = ChainlitCommandHandler(self.docparser, self.vectorstore)
+        self.query_optimizer = QueryOptimizer(query_decomposition=True, query_expansion=True)
+        self.info_retriever = InfoRetriever(self.vectorstore)
+        self.human_reviser = ChainlitHumanReviser()
+        self.info_summarizer = InfoSummarizer()
+        self.nodes = [
+            self.chainlit_command_handler,
+            self.query_optimizer,
+            self.info_retriever,
+            self.human_reviser,
+            self.info_summarizer
+        ]
         self.builder = StateGraph(PairReaderState)
-        self.builder.add_node("chainlit_command_handler", ChainlitCommandHandler(self.docparser, self.vectorstore))
-        self.builder.add_node("query_optimizer", QueryOptimizer(query_decomposition=True, query_expansion=True))
-        self.builder.add_node("info_retriever", InfoRetriever(self.vectorstore))
-        self.builder.add_node("human_reviser", ChainlitHumanReviser())
-        self.builder.add_node("info_summarizer", InfoSummarizer())
+        self.builder.add_node("chainlit_command_handler", self.chainlit_command_handler)
+        self.builder.add_node("query_optimizer", self.query_optimizer)
+        self.builder.add_node("info_retriever", self.info_retriever)
+        self.builder.add_node("human_reviser", self.human_reviser)
+        self.builder.add_node("info_summarizer", self.info_summarizer)
         self.builder.add_edge(START, "chainlit_command_handler")
         self.builder.add_edge("chainlit_command_handler", "query_optimizer")
         self.builder.add_edge("query_optimizer", "human_reviser")
@@ -26,3 +38,7 @@ class PairReaderAgent:
 
     def __call__(self, state: PairReaderState) -> PairReaderState:
         return self.workflow.invoke(state)
+
+    def set_params(self, **params):
+        for node in self.nodes:
+            node.set_params(**params)

@@ -1,7 +1,7 @@
 from pairreader.schemas import PairReaderState
 from pairreader.vectorestore import VectorStore
 from pairreader.docparser import DocParser
-from pairreader.utils import logging_verbosity, langgraph_stream_verbosity
+from pairreader.utils import logging_verbosity, langgraph_stream_verbosity, ParamsMixin
 from langchain.chat_models import init_chat_model
 from langchain_core.messages import AIMessage, SystemMessage, HumanMessage, ToolMessage, AnyMessage
 from langgraph.types import interrupt
@@ -9,7 +9,7 @@ from typing import List, Optional, Union, Dict, Any
 import chainlit as cl
 
 
-class ChainlitCommandHandler:
+class ChainlitCommandHandler(ParamsMixin):
     """
     Handles Chainlit commands (Create, Update) and file upload logic.
 
@@ -56,7 +56,7 @@ class ChainlitCommandHandler:
             return {}
 
 
-class QueryOptimizer:
+class QueryOptimizer(ParamsMixin):
     """
     Optimizes user queries for vector store retrieval.
 
@@ -77,21 +77,25 @@ class QueryOptimizer:
     def __init__(
             self, 
             llm_name: str = "anthropic:claude-3-5-haiku-latest",
-            fallback_llm: str = "anthropic:claude-3-7-sonnet-latest",
+            fallback_llm_name: str = "anthropic:claude-3-7-sonnet-latest",
             query_decomposition: bool = False,
             query_expansion: bool = False,
             max_expansion: int = 10
     ):
         self.llm_name = llm_name
+        self.fallback_llm_name = fallback_llm_name
         self.query_decomposition = query_decomposition
         self.query_expansion = query_expansion
         self.max_expansion = max_expansion
-        self.llm = (
-            init_chat_model(llm_name)
-            .with_fallbacks([init_chat_model(fallback_llm)])
-        )
         if self.query_expansion and not self.query_decomposition:
             raise ValueError("query_expansion can only be used if query_decomposition is True")
+    
+    @property
+    def llm(self):
+        return (
+            init_chat_model(self.llm_name)
+            .with_fallbacks([init_chat_model(self.fallback_llm_name)])
+        )
 
     @logging_verbosity
     @langgraph_stream_verbosity
@@ -129,7 +133,7 @@ class QueryOptimizer:
         return {"llm_subqueries": subqueries}
     
 
-class ChainlitHumanReviser:
+class ChainlitHumanReviser(ParamsMixin):
     """
     Allows the user to revise LLM-generated subqueries before retrieval.
 
@@ -153,25 +157,28 @@ class ChainlitHumanReviser:
             return {"human_subqueries": state["llm_subqueries"]}
         else:
             return {"human_subqueries": res["output"].split("\n")}
+        
+    def set_params(self, **params):
+        return {}
 
 
-class InfoRetriever:
+class InfoRetriever(ParamsMixin):
     """
     Retrieves relevant information from the vector store based on optimized queries.
 
     - Uses human-revised subqueries to query the vector store.
     - Returns retrieved documents and their metadata for summarization.
     """
-    def __init__(self, vectorstore: VectorStore, n_results: int = 10):
+    def __init__(self, vectorstore: VectorStore, n_documents: int = 10):
         self.vectorstore = vectorstore
-        self.n_results = n_results
+        self.n_documents = n_documents
 
     @logging_verbosity
     @langgraph_stream_verbosity
     @cl.step(type="InfoRetriever", name="InfoRetriever")
     async def __call__(self, state: PairReaderState, *args, **kwds) -> Dict[str, Any]:
         """Retrieve documents from vector store."""
-        results = self.vectorstore.query(query_texts=state["human_subqueries"], n_results=self.n_results)
+        results = self.vectorstore.query(query_texts=state["human_subqueries"], n_documents=self.n_documents)
         state_update = {
             "retrieved_documents": results["documents"][0],
             "retrieved_metadatas": results["metadatas"][0]
@@ -179,7 +186,7 @@ class InfoRetriever:
         return state_update
 
 
-class InfoSummarizer:
+class InfoSummarizer(ParamsMixin):
     """
     Summarizes retrieved information based on the user's original query.
 
@@ -188,7 +195,10 @@ class InfoSummarizer:
     """
     def __init__(self, llm_name: str = "anthropic:claude-3-5-haiku-latest"):
         self.llm_name = llm_name
-        self.llm = init_chat_model(llm_name)
+    
+    @property
+    def llm(self):
+        return init_chat_model(self.llm_name)
 
     @logging_verbosity
     @langgraph_stream_verbosity
