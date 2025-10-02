@@ -4,6 +4,7 @@ from pairreader.schemas import PairReaderState
 from pairreader.nodes import QueryOptimizer, ChainlitHumanReviser, InfoRetriever, InfoSummarizer, ChainlitCommandHandler
 from langgraph.graph.state import StateGraph
 from langgraph.graph import START, END
+from langgraph.checkpoint.memory import InMemorySaver
 from typing import Any, Optional
 
 class PairReaderAgent:
@@ -22,6 +23,7 @@ class PairReaderAgent:
             self.human_reviser,
             self.info_summarizer
         ]
+        self.checkpointer = InMemorySaver()
         self.builder = StateGraph(PairReaderState)
         self.builder.add_node("chainlit_command_handler", self.chainlit_command_handler)
         self.builder.add_node("query_optimizer", self.query_optimizer)
@@ -34,7 +36,7 @@ class PairReaderAgent:
         self.builder.add_edge("human_reviser", "info_retriever")
         self.builder.add_edge("info_retriever", "info_summarizer")
         self.builder.add_edge("info_summarizer", END)
-        self.workflow = self.builder.compile()
+        self.workflow = self.builder.compile(checkpointer=self.checkpointer)
 
     def __call__(self, state: PairReaderState) -> PairReaderState:
         return self.workflow.invoke(state)
