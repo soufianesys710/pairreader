@@ -1,4 +1,5 @@
 from pairreader.agents import PairReaderAgent
+from pairreader.clmemory import InMemoryDataLayer
 from chainlit.input_widget import Select, Switch, Slider
 import chainlit as cl
 
@@ -100,19 +101,40 @@ async def on_chat_start():
     ).send()
 
 
+@cl.on_chat_resume
+async def on_chat_resume(thread):
+    pass
+
+
+@cl.on_chat_end
+async def on_chat_end():
+    pass
+
+
 @cl.on_settings_update
 async def on_settings_update(settings):
     pairreader.set_params(**settings)
 
 
+@cl.data_layer
+def get_data_layer():
+    return InMemoryDataLayer()
+
+
 @cl.on_message
 async def on_message(msg: cl.Message):
+    thread_id = cl.context.session.thread_id
+    config = {"configurable": {"thread_id": thread_id}}
     state = {
         "chainlit_command": msg.command if hasattr(msg, "command") else None,
         "user_query": msg.content,
     }
     final_summary_msg = cl.Message(content="")
-    async for mode, data  in pairreader.workflow.astream(state, stream_mode=["messages", "updates"]):
+    async for mode, data in pairreader.workflow.astream(
+        state, 
+        stream_mode=["messages", "updates"],
+        config=config,
+    ):
         if mode == "updates":
             if "__interrupt__" in data:
                 await cl.Message(content=data["__interrupt__"][0].value).send()
