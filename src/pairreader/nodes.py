@@ -68,27 +68,16 @@ class QueryOptimizer(ParamsMixin):
 
     Features:
         - query_decomposition: If True, decomposes the query into sub-queries (LLM decides how many).
-        - query_expansion: If True, expands the query for better retrieval.
-        - max_expansion: int, max number of expansion queries to generate (default 10).
-
-    Raises:
-        ValueError: If query_expansion is used without query_decomposition.
     """
     def __init__(
-            self, 
+            self,
             llm_name: str = "anthropic:claude-3-5-haiku-latest",
             fallback_llm_name: str = "anthropic:claude-3-7-sonnet-latest",
-            query_decomposition: bool = False,
-            query_expansion: bool = False,
-            max_expansion: int = 10
+            query_decomposition: bool = False
     ):
         self.llm_name = llm_name
         self.fallback_llm_name = fallback_llm_name
         self.query_decomposition = query_decomposition
-        self.query_expansion = query_expansion
-        self.max_expansion = max_expansion
-        if self.query_expansion and not self.query_decomposition:
-            raise ValueError("query_expansion can only be used if query_decomposition is True")
     
     @property
     def llm(self):
@@ -116,20 +105,6 @@ class QueryOptimizer(ParamsMixin):
             ]
             subqueries_msg: AIMessage = self.llm.invoke(decomposition_prompt)
             subqueries += [s.strip() for s in subqueries_msg.content.split("\n") if s.strip()]
-        if self.query_expansion and subqueries:
-            expansion_prompt = [
-                SystemMessage(
-                    "You are a query retrieval optimizer for vector store semantic search. "
-                    f"Use the following sub-queries to generate up to {self.max_expansion} additional semantically and synonymously similar queries for improved retrieval. "
-                    "Each sub-query should be on a new line for correct parsing using split('\\n'). "
-                    f"Do not generate more than {self.max_expansion} expansion queries. "
-                    "Sub-queries:"
-                ),
-                HumanMessage("\n\n".join(subqueries))
-            ]
-            expansion_msg: AIMessage = self.llm.invoke(expansion_prompt)
-            subqueries += [s.strip() for s in expansion_msg.content.split("\n") if s.strip()]
-            subqueries = list(set(subqueries))
         return {"llm_subqueries": subqueries}
     
 
