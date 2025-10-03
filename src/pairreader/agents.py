@@ -12,7 +12,7 @@ class PairReaderAgent:
         self.docparser = docparser or DocParser()
         self.vectorstore = vectorstore or VectorStore()
         self.chainlit_command_handler = ChainlitCommandHandler(self.docparser, self.vectorstore)
-        self.query_optimizer = QueryOptimizer(query_decomposition=True, query_expansion=True)
+        self.query_optimizer = QueryOptimizer(query_decomposition=True)
         self.info_retriever = InfoRetriever(self.vectorstore)
         self.human_reviser = ChainlitHumanReviser()
         self.info_summarizer = InfoSummarizer()

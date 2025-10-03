@@ -72,22 +72,9 @@ async def on_chat_start():
                 initial_index=1,
             ),
             Switch(
-                id="query_decomposition", 
-                label="Decompose the user query before querying the Knowledge base", 
+                id="query_decomposition",
+                label="Decompose the user query before querying the Knowledge base",
                 initial=True
-            ),
-            Switch(
-                id="query_expansion", 
-                label="Expand the user query into more similar queries before querying the Knowledge base", 
-                initial=True,
-            ),
-            Slider(
-                id="max_expansion",
-                label="Maximum number of expanded queries",
-                initial=7,
-                min=5,
-                max=10,
-                step=1,
             ),
             Slider(
                 id="n_documents",
