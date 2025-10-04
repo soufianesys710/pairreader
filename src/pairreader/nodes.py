@@ -1,17 +1,17 @@
-from pairreader.schemas import PairReaderState
+from pairreader.schemas import PairReaderState, RouteDecision
 from pairreader.vectorestore import VectorStore
 from pairreader.docparser import DocParser
 from pairreader.utils import logging_verbosity, langgraph_stream_verbosity, ParamsMixin
 from langchain.chat_models import init_chat_model
-from langchain_core.messages import AIMessage, SystemMessage, HumanMessage, ToolMessage, AnyMessage
+from langchain_core.messages import AIMessage, SystemMessage, HumanMessage
 from langgraph.types import interrupt
-from typing import List, Optional, Union, Dict, Any
+from typing import List, Optional, Dict, Any
 import chainlit as cl
 
 
-class ChainlitCommandHandler(ParamsMixin):
+class KnowledgeBaseHandler(ParamsMixin):
     """
-    Handles Chainlit commands (Create, Update) and file upload logic.
+    Handles knowledge base commands (Create, Update) and file upload logic.
 
     - Updates state with chainlit_command and processes file ingestion.
     - Prompts user to upload files and ingests them into the vector store.
@@ -37,10 +37,11 @@ class ChainlitCommandHandler(ParamsMixin):
                 max_files=5,
             ).send()
             if files is None:
-                interrupt(
+                await cl.Message(
                     f"You haven't uploaded any files in the 60s following your {chainlit_command} command!"
                     "You can continue to use the your ciurrent knowledge base, or resend a Create or Update command described in the toolbox"
                 )
+                interrupt()
             else:
                 for f in files:
                     self.docparser.parse(f.path)
@@ -48,9 +49,10 @@ class ChainlitCommandHandler(ParamsMixin):
                     metadatas = [{"fname": f.name}] * len(chunks)
                     self.vectorstore.ingest_chunks(chunks, metadatas)
                 # files uploaded and parsed, ask for a user query
-                interrupt(
+                await cl.Message(
                     f"Files uploaded: {[f.name for f in files]}, the knowledge base is ready. What do you want to know?"
                 )
+                interrupt()
         # the user doesn't send a command, rather he should've sent a message, don't update the state
         else:
             return {}
@@ -64,7 +66,7 @@ class QueryOptimizer(ParamsMixin):
         - "user_query": str, the original query from the user.
 
     Output state keys:
-        - "llm_subqueries": list[str], queries to use for retrieval.
+        - "subqueries": list[str], queries to use for retrieval.
 
     Features:
         - query_decomposition: If True, decomposes the query into sub-queries (LLM decides how many).
@@ -91,50 +93,83 @@ class QueryOptimizer(ParamsMixin):
     # @cl.step(type="QueryOptimizer", name="QueryOptimizer")
     async def __call__(self, state: PairReaderState, *args, **kwds) -> Dict[str, List[str]]:
         """Optimize user query for retrieval."""
-        subqueries = [state["user_query"]]
+        msgs = []
         if self.query_decomposition:
-            decomposition_prompt = [
-                SystemMessage(
-                    "You are a query retrieval optimizer for vector store semantic search. "
-                    "Decompose the user's query into simpler, smaller sub-queries better suited for vector store search. "
-                    "Decide yourself how many sub-queries are optimal for retrieval. "
-                    "Each sub-query should be on a new line for correct parsing using split('\\n'). "
-                    "User Query:"
-                ),
-                HumanMessage(state["user_query"])
-            ]
-            subqueries_msg: AIMessage = self.llm.invoke(decomposition_prompt)
-            subqueries += [s.strip() for s in subqueries_msg.content.split("\n") if s.strip()]
-        return {"llm_subqueries": subqueries}
+            # Only add SystemMessage if this is the first run (messages list is empty)
+            if not state["messages"]:
+                msgs.append(
+                    SystemMessage(
+                        "You are a query retrieval optimizer for vector store semantic search. "
+                        "Decompose the user's query into simpler, smaller sub-queries better suited for vector store search. "
+                        "Decide yourself how many sub-queries are optimal for retrieval. "
+                        "Each sub-query should be on a new line for correct parsing using split('\\n'). "
+                        "User Query:"
+                    )
+                )
+            msgs.append(HumanMessage(state["user_query"]))
+            response: AIMessage = self.llm.invoke(state["messages"] + msgs)
+            msgs.append(response)
+        state_update = {
+            "messages": msgs,
+            "subqueries": [s.strip() for s in response.content.split("\n") if s.strip()]
+        }
+        return state_update
     
 
-class ChainlitHumanReviser(ParamsMixin):
+class HumanInTheLoopApprover(ParamsMixin):
     """
     Allows the user to revise LLM-generated subqueries before retrieval.
 
     - Prompts user to review and edit subqueries.
     - Uses original subqueries if no user input is received within timeout.
     """
-    def __init__(self):
-        pass
+    def __init__(
+        self,
+        llm_name: str = "anthropic:claude-3-5-haiku-latest",
+        fallback_llm_name: str = "anthropic:claude-3-7-sonnet-latest"
+    ):
+        self.llm_name = llm_name
+        self.fallback_llm_name = fallback_llm_name
+
+    @property
+    def llm(self):
+        return (
+            init_chat_model(self.llm_name)
+            .with_structured_output(RouteDecision)
+            .with_fallbacks([
+                init_chat_model(self.fallback_llm_name)
+                .with_structured_output(RouteDecision)
+            ])
+        )
+
 
     @logging_verbosity
     @langgraph_stream_verbosity
     # @cl.step(type="ChainlitHumanReviser", name="ChainlitHumanReviser")
     async def __call__(self, state: PairReaderState, *args, **kwds) -> Dict[str, Any]:
         """Request user revision of LLM subqueries."""
-        res = await cl.AskUserMessage(
-            content=f"Please revise the llm genrated subqueries:\n{'\n'.join(state['llm_subqueries'])}"
+        ask_feedback_prompt = f"Please revise the llm genrated subqueries!"
+        user_feedback = await cl.AskUserMessage(
+            content=ask_feedback_prompt + f"\n{'\n'.join(state['subqueries'])}"
         ).send()
-        # if the user doesn(t answer at timeout
-        if res is None:
+        # if the user doesn't answer at timeout
+        if user_feedback is None:
             await cl.Message("You haven't revised the LLM genrated subqueries in the following 60s, we're using them as they are!").send()
-            return {"human_subqueries": state["llm_subqueries"]}
+            return {}
         else:
-            return {"human_subqueries": res["output"].split("\n")}
-        
-    def set_params(self, **params):
-        return {}
+            msgs = state["messages"] + [
+                AIMessage(content=ask_feedback_prompt),
+                HumanMessage(user_feedback["output"])
+            ]
+            decision: RouteDecision = self.llm.invoke(msgs)
+            state_update = {
+                "messages": [
+                    AIMessage(content=ask_feedback_prompt),
+                    HumanMessage(user_feedback["output"]),
+                    AIMessage(content=decision.next_node, name=decision.next_node)
+                ]
+            }
+            return state_update
 
 
 class InfoRetriever(ParamsMixin):
@@ -153,7 +188,8 @@ class InfoRetriever(ParamsMixin):
     # @cl.step(type="InfoRetriever", name="InfoRetriever")
     async def __call__(self, state: PairReaderState, *args, **kwds) -> Dict[str, Any]:
         """Retrieve documents from vector store."""
-        results = self.vectorstore.query(query_texts=state["human_subqueries"], n_documents=self.n_documents)
+        subqueries = [state.get("user_query")] + state.get("subqueries")
+        results = self.vectorstore.query(query_texts=subqueries, n_documents=self.n_documents)
         state_update = {
             "retrieved_documents": results["documents"][0],
             "retrieved_metadatas": results["metadatas"][0]
@@ -181,7 +217,7 @@ class InfoSummarizer(ParamsMixin):
     async def __call__(self, state: PairReaderState, *args, **kwds) -> Dict[str, Any]:
         """Summarize retrieved documents for user query."""
         msgs = [
-            SystemMessage(
+            HumanMessage(
                 "You are a helpful summarization assistant. Create a comprehensive summary "
                 "of the retrieved information that directly addresses the user's query. "
                 "Focus on relevant information and maintain accuracy."
@@ -190,6 +226,8 @@ class InfoSummarizer(ParamsMixin):
             HumanMessage("Retrieved Information:"),
             HumanMessage("\n\n".join(state["retrieved_documents"]))
         ]
-        summary = self.llm.invoke(msgs)
-        return {"response": summary}
+        summary :AIMessage = self.llm.invoke(msgs)
+        await cl.Message(content=summary.content).send()
+        state_update = {"response": summary.content, "messages": msgs + [summary]}
+        return state_update
         

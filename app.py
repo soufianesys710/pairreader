@@ -112,24 +112,25 @@ def get_data_layer():
 async def on_message(msg: cl.Message):
     thread_id = cl.context.session.thread_id
     config = {"configurable": {"thread_id": thread_id}}
-    state = {
+    input = {
         "chainlit_command": msg.command if hasattr(msg, "command") else None,
         "user_query": msg.content,
     }
-    final_summary_msg = cl.Message(content="")
-    async for mode, data in pairreader.workflow.astream(
-        state, 
-        stream_mode=["messages", "updates"],
-        config=config,
-    ):
-        if mode == "updates":
-            if "__interrupt__" in data:
-                await cl.Message(content=data["__interrupt__"][0].value).send()
-        elif mode == "messages":
-            aichunk, metadata = data
-            if aichunk.content and metadata.get("langgraph_node") == "info_summarizer":
-                await final_summary_msg.stream_token(aichunk.content)
-    await final_summary_msg.update()
+    _ = await pairreader(input=input, config=config)
+    # final_summary_msg = cl.Message(content="")
+    # async for mode, data in pairreader.workflow.astream(
+    #     state, 
+    #     stream_mode=["messages", "updates"],
+    #     config=config,
+    # ):
+    #     if mode == "updates":
+    #         if "__interrupt__" in data:
+    #             await cl.Message(content=data["__interrupt__"][0].value).send()
+    #     elif mode == "messages":
+    #         aichunk, metadata = data
+    #         if aichunk.content and metadata.get("langgraph_node") == "info_summarizer":
+    #             await final_summary_msg.stream_token(aichunk.content)
+    # await final_summary_msg.update()
 
 
 if __name__ == "__main__":
