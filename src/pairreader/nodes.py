@@ -1,4 +1,4 @@
-from pairreader.schemas import PairReaderState, RouteDecision
+from pairreader.schemas import PairReaderState, HITLDecision
 from pairreader.vectorestore import VectorStore
 from pairreader.docparser import DocParser
 from pairreader.utils import logging_verbosity, langgraph_stream_verbosity, ParamsMixin
@@ -35,6 +35,7 @@ class KnowledgeBaseHandler(ParamsMixin):
                 accept=["text/plain", "application/pdf"],
                 max_size_mb=10,
                 max_files=5,
+                timeout=90
             ).send()
             if files is None:
                 await cl.Message(
@@ -93,11 +94,10 @@ class QueryOptimizer(ParamsMixin):
     # @cl.step(type="QueryOptimizer", name="QueryOptimizer")
     async def __call__(self, state: PairReaderState, *args, **kwds) -> Dict[str, List[str]]:
         """Optimize user query for retrieval."""
-        msgs = []
         if self.query_decomposition:
             # Only add SystemMessage if this is the first run (messages list is empty)
             if not state["messages"]:
-                msgs.append(
+                state["messages"].append(
                     SystemMessage(
                         "You are a query retrieval optimizer for vector store semantic search. "
                         "Decompose the user's query into simpler, smaller sub-queries better suited for vector store search. "
@@ -106,11 +106,11 @@ class QueryOptimizer(ParamsMixin):
                         "User Query:"
                     )
                 )
-            msgs.append(HumanMessage(state["user_query"]))
-            response: AIMessage = self.llm.invoke(state["messages"] + msgs)
-            msgs.append(response)
+                state["messages"].append(HumanMessage(state["user_query"]))
+            response: AIMessage = self.llm.invoke(state["messages"])
+            await cl.Message(response.content).send()
         state_update = {
-            "messages": msgs,
+            "messages": [response],
             "subqueries": [s.strip() for s in response.content.split("\n") if s.strip()]
         }
         return state_update
@@ -135,10 +135,10 @@ class HumanInTheLoopApprover(ParamsMixin):
     def llm(self):
         return (
             init_chat_model(self.llm_name)
-            .with_structured_output(RouteDecision)
+            .with_structured_output(HITLDecision)
             .with_fallbacks([
                 init_chat_model(self.fallback_llm_name)
-                .with_structured_output(RouteDecision)
+                .with_structured_output(HITLDecision)
             ])
         )
 
@@ -148,28 +148,21 @@ class HumanInTheLoopApprover(ParamsMixin):
     # @cl.step(type="ChainlitHumanReviser", name="ChainlitHumanReviser")
     async def __call__(self, state: PairReaderState, *args, **kwds) -> Dict[str, Any]:
         """Request user revision of LLM subqueries."""
-        ask_feedback_prompt = f"Please revise the llm genrated subqueries!"
+        ask_feedback_prompt = f"Please revise the llm genrated subqueries, please state explicitly if approve or disapprove these results!"
         user_feedback = await cl.AskUserMessage(
-            content=ask_feedback_prompt + f"\n{'\n'.join(state['subqueries'])}"
+            content=ask_feedback_prompt,
+            timeout=90
         ).send()
         # if the user doesn't answer at timeout
         if user_feedback is None:
-            await cl.Message("You haven't revised the LLM genrated subqueries in the following 60s, we're using them as they are!").send()
-            return {}
+            await cl.Message("You haven't revised the LLM genrated subqueries in the following 90s, we're using them as they are!").send()
+            state_update = {"human_in_the_loop_decision": None}
         else:
-            msgs = state["messages"] + [
-                AIMessage(content=ask_feedback_prompt),
-                HumanMessage(user_feedback["output"])
-            ]
-            decision: RouteDecision = self.llm.invoke(msgs)
-            state_update = {
-                "messages": [
-                    AIMessage(content=ask_feedback_prompt),
-                    HumanMessage(user_feedback["output"]),
-                    AIMessage(content=decision.next_node, name=decision.next_node)
-                ]
-            }
-            return state_update
+            state["messages"].append(AIMessage(content=ask_feedback_prompt))
+            state["messages"].append(HumanMessage(user_feedback["output"]))
+            decision: HITLDecision = self.llm.invoke(state["messages"])
+            state_update = {"human_in_the_loop_decision": decision}
+        return state_update
 
 
 class InfoRetriever(ParamsMixin):
@@ -216,7 +209,7 @@ class InfoSummarizer(ParamsMixin):
     # @cl.step(type="InfoSummarizer", name="InfoSummarizer")
     async def __call__(self, state: PairReaderState, *args, **kwds) -> Dict[str, Any]:
         """Summarize retrieved documents for user query."""
-        msgs = [
+        state["messages"].extend([
             HumanMessage(
                 "You are a helpful summarization assistant. Create a comprehensive summary "
                 "of the retrieved information that directly addresses the user's query. "
@@ -225,9 +218,9 @@ class InfoSummarizer(ParamsMixin):
             HumanMessage(f"User Query: {state['user_query']}"),
             HumanMessage("Retrieved Information:"),
             HumanMessage("\n\n".join(state["retrieved_documents"]))
-        ]
-        summary :AIMessage = self.llm.invoke(msgs)
-        await cl.Message(content=summary.content).send()
-        state_update = {"response": summary.content, "messages": msgs + [summary]}
+        ])
+        response :AIMessage = self.llm.invoke(state["messages"])
+        await cl.Message(content=response.content).send()
+        state_update = {"messages": [response], "summary": response.content}
         return state_update
         

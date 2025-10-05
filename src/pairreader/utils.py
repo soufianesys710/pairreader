@@ -36,9 +36,9 @@ def langgraph_stream_verbosity(func):
 	"""
 	@wraps(func)
 	async def wrapper(self, *args, **kwargs):
-		get_stream_writer()(f"self.__class__.__name__ started")
+		get_stream_writer()(f"{self.__class__.__name__} started")
 		result = await func(self, *args, **kwargs)
-		get_stream_writer()(f"self.__class__.__name__ finished")
+		get_stream_writer()(f"{self.__class__.__name__} finished")
 		return result
 	return wrapper
 
