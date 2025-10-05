@@ -44,11 +44,10 @@ class PairReaderAgent:
     @staticmethod
     def route_after_human_in_the_loop_approver(state: PairReaderState) -> Literal["query_optimizer", "info_retriever"]:
         """Route based on structured output decision from human in the loop approver node."""
-        last_message = state["messages"][-1]
-        # Default to info_retriever if no decision or user didn't respond
-        if hasattr(last_message, 'name') and last_message.name:
-            return last_message.name
-        return "info_retriever"
+        if state["human_in_the_loop_decision"].next_node is not None:
+            return state["human_in_the_loop_decision"].next_node
+        else:
+            return "info_retriever"
 
     def set_params(self, **params):
         for node in self.nodes:
