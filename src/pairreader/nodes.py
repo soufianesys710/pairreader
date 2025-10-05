@@ -107,8 +107,12 @@ class QueryOptimizer(ParamsMixin):
                     )
                 )
                 state["messages"].append(HumanMessage(state["user_query"]))
-            response: AIMessage = self.llm.invoke(state["messages"])
-            await cl.Message(response.content).send()
+            msg = cl.Message(content="")
+            async for chunk in self.llm.astream(state["messages"]):
+                if chunk.content:
+                    await msg.stream_token(chunk.content)
+            await msg.update()
+            response = AIMessage(content=msg.content)
         state_update = {
             "messages": [response],
             "subqueries": [s.strip() for s in response.content.split("\n") if s.strip()]
@@ -219,8 +223,12 @@ class InfoSummarizer(ParamsMixin):
             HumanMessage("Retrieved Information:"),
             HumanMessage("\n\n".join(state["retrieved_documents"]))
         ])
-        response :AIMessage = self.llm.invoke(state["messages"])
-        await cl.Message(content=response.content).send()
+        msg = cl.Message(content="")
+        async for chunk in self.llm.astream(state["messages"]):
+            if chunk.content:
+                await msg.stream_token(chunk.content)
+        await msg.update()
+        response = AIMessage(content=msg.content)
         state_update = {"messages": [response], "summary": response.content}
         return state_update
         
