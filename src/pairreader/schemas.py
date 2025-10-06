@@ -12,9 +12,14 @@ class HITLDecision(BaseModel):
 class PairReaderState(TypedDict):
     messages: Annotated[List[AnyMessage], add_messages]
     user_query: Optional[str]
+    # knowledge base
     chainlit_command: Optional[str]
+    # QA Agent
     subqueries: Optional[List[str]]
     human_in_the_loop_decision: Optional[HITLDecision]
     retrieved_documents: Optional[List[str]]
     retrieved_metadatas: Optional[List[Dict]]
     summary: Optional[str]
+    # Discovery Agent
+    cluster_summaries: Optional[List[str]]
+    summary_of_summaries: Optional[str]
