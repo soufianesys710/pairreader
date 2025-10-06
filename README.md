@@ -84,28 +84,46 @@ Adjust the following in the UI settings panel:
 
 ## 🏗️ Architecture
 
-PairReader uses a **LangGraph multi-agent workflow** with the following stages:
+PairReader uses a **three-tier LangGraph multi-agent system**:
 
-1. **Knowledge Base Handler** - Processes file uploads and manages the vector store
-2. **Query Optimizer** - Decomposes complex queries into targeted sub-queries
-3. **Human-in-the-Loop Approver** - Lets you review and refine the query plan
-4. **Info Retriever** - Searches the vector store with optimized queries
-5. **Info Summarizer** - Synthesizes retrieved information into a coherent answer
+### Main Agents
+
+1. **PairReaderAgent** (Supervisor)
+   - Manages knowledge base operations (Create/Update/Query)
+   - Routes queries to specialized sub-agents using LangGraph's Command primitive
+
+2. **QAAgent** - For answering specific questions
+   - Query optimization and decomposition (optional)
+   - Human-in-the-loop review of subqueries
+   - Targeted document retrieval from vector store
+   - Answer synthesis
+
+3. **DiscoveryAgent** - For exploration and overview
+   - Document sampling and clustering using HDBSCAN
+   - Parallel map-reduce summarization
+   - Comprehensive content overview
+
+### Intelligent Routing
+
+The system automatically routes your query to the appropriate agent:
+- **"What does chapter 3 say about climate change?"** → QAAgent (specific question)
+- **"What are the main themes in these documents?"** → DiscoveryAgent (exploration)
 
 ### Technology Stack
 - **UI Framework**: Chainlit for interactive chat interface
 - **Orchestration**: LangGraph for multi-agent workflow management
 - **LLM**: Anthropic's Claude (Haiku/Sonnet) via LangChain
-- **Vector Store**: ChromaDB for semantic search
+- **Vector Store**: ChromaDB for semantic search and clustering
 - **Document Parser**: Docling for robust PDF and text processing
 
 ## 💡 Tips for Best Results
 
-- **Start specific**: Ask focused questions rather than broad queries
+- **Choose your question style**: Ask specific questions for precise answers, or broad questions for overviews
 - **Use context**: Reference specific topics or sections when you know them
 - **Iterate**: If the first answer isn't perfect, refine your question based on what you learned
 - **Organize your knowledge base**: Use Create mode to start fresh when switching to a completely different topic
-- **Review subqueries**: Pay attention to how your question is decomposed—it helps you understand what's being searched
+- **Review subqueries** (QA mode): When your question is decomposed, review the subqueries—it helps you understand what's being searched
+- **Explore your documents** (Discovery mode): Ask for summaries and themes to get a big-picture view
 
 ## 🔧 Development
 
@@ -129,15 +147,17 @@ uv sync --group dev  # Includes Jupyter for experimentation
 ```
 pairreader/
 ├── src/pairreader/
-│   ├── __main__.py        # Application entry point
-│   ├── agents.py          # LangGraph workflow orchestration
-│   ├── nodes.py           # Individual workflow nodes
-│   ├── schemas.py         # State definitions
-│   ├── vectorestore.py    # ChromaDB interface
-│   ├── docparser.py       # Document processing
-│   └── utils.py           # Decorators and utilities
-├── pyproject.toml         # Project configuration
-└── CLAUDE.md             # Developer documentation
+│   ├── __main__.py           # Application entry point
+│   ├── agents.py             # Multi-agent orchestration (PairReaderAgent, QAAgent, DiscoveryAgent)
+│   ├── pairreader_nodes.py   # Supervisor nodes (KnowledgeBaseHandler, QADiscoveryRouter)
+│   ├── qa_nodes.py           # QA Agent nodes (QueryOptimizer, InfoRetriever, etc.)
+│   ├── discovery_nodes.py    # Discovery Agent nodes (MapSummarizer, ReduceSummarizer)
+│   ├── schemas.py            # Shared state definitions
+│   ├── vectorestore.py       # ChromaDB interface with clustering support
+│   ├── docparser.py          # Document processing
+│   └── utils.py              # Decorators and utilities
+├── pyproject.toml            # Project configuration
+└── CLAUDE.md                 # Developer documentation
 ```
 
 ## 🚧 Roadmap
@@ -145,8 +165,9 @@ pairreader/
 - [ ] Enhanced table and image extraction from documents
 - [ ] Embedding-aware chunking strategies
 - [ ] Page number and source attribution in responses
+- [ ] Improve Discovery Agent sampling to ensure full data coverage
 - [ ] Secure authentication with database backend
-- [ ] Support for additional document formats
+- [ ] Support for additional document formats (Word, Excel, etc.)
 - [ ] OAuth and SSO integration
 
 ## 🤝 Contributing

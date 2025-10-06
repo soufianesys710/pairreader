@@ -37,43 +37,91 @@ CHAINLIT_AUTH_SECRET=your_secret_here  # Generate with: chainlit create-secret
 
 ## Architecture Overview
 
-### LangGraph Workflow
-The application uses a LangGraph StateGraph with the following node sequence:
-1. **knowledge_base_handler** - Processes Chainlit commands (/Create, /Update) and file uploads
-2. **query_optimizer** - Decomposes user queries into subqueries for better retrieval
-3. **human_in_the_loop_approver** - Allows user to revise/approve LLM-generated subqueries or request regeneration (with timeout)
-4. **info_retriever** - Queries ChromaDB vector store with optimized queries
-5. **info_summarizer** - Summarizes retrieved documents using LLM
+### Multi-Agent System Architecture
+
+PairReader uses a **three-tier agent hierarchy** with LangGraph:
+
+1. **PairReaderAgent** (Supervisor) - Top-level orchestrator
+   - Handles knowledge base operations (Create/Update/Query modes)
+   - Routes user queries to specialized sub-agents
+   - Graph: `knowledge_base_handler` → `qa_discovery_router` → sub-agents
+
+2. **QAAgent** (Sub-agent) - Answers specific questions
+   - Graph: `query_optimizer` → `human_in_the_loop_approver` → `info_retriever` → `info_summarizer`
+   - Used when user has a specific question about the documents
+   - Optional query decomposition for complex questions
+
+3. **DiscoveryAgent** (Sub-agent) - Provides document overview and exploration
+   - Graph: `map_summarizer` → `reduce_summarizer`
+   - Uses map-reduce pattern to cluster and summarize documents
+   - Helps users discover content when they don't know what to look for
+
+### Agent Routing with Command Primitive
+
+The `QADiscoveryRouter` uses LangGraph's **Command primitive** for dynamic routing:
+- LLM is bound with two tools: `qa_agent_handoff` and `discovery_agent_handoff`
+- Based on user query intent, LLM selects appropriate tool
+- Tool execution returns a `Command(goto="agent_name", update={...})` to navigate the graph
+- This enables intelligent handoff between specialized agents
+
+**When QAAgent is triggered**:
+- User asks specific questions: "What does chapter 3 say about X?", "How many Y are mentioned?"
+- User knows what they're looking for and wants targeted answers
+- Workflow emphasizes precise retrieval and focused summarization
+
+**When DiscoveryAgent is triggered**:
+- User asks for overview: "What is this document about?", "Summarize the main themes"
+- User wants to explore content without specific questions
+- Workflow emphasizes clustering similar content and providing broad insights
 
 ### Core Components
 
 **PairReaderAgent** (`src/pairreader/agents.py`)
-- Main orchestrator that builds and manages the LangGraph workflow
+- Main orchestrator with three sub-agents: QAAgent, DiscoveryAgent, and router
 - Uses `InMemorySaver` for checkpointing (not persisted to disk)
 - Nodes are stored as tuples `(name, node_instance)` in `self.nodes` list
 - `set_params(**params)` propagates settings changes to all nodes (accesses `node[1]` for node instance)
+
+**QAAgent** (`src/pairreader/agents.py`)
+- Specialized agent for question-answering workflow
+- Has its own StateGraph and InMemorySaver checkpointer
 - `route_after_human_in_the_loop_approver()` uses structured output (`HITLDecision`) to route to either `query_optimizer` (regenerate) or `info_retriever` (proceed)
 
+**DiscoveryAgent** (`src/pairreader/agents.py`)
+- Specialized agent for document discovery and summarization
+- Has its own StateGraph and InMemorySaver checkpointer
+- Implements parallel map-reduce pattern for efficient clustering
+
 **State Management** (`src/pairreader/schemas.py`)
-- `PairReaderState` TypedDict tracks:
+- `PairReaderState` TypedDict is **shared across all agents** (PairReaderAgent, QAAgent, DiscoveryAgent)
+- State fields:
   - `messages`: Annotated list with `add_messages` reducer for LLM conversation history
   - `user_query`: Original user question
-  - `chainlit_command`: Command type (Create/Update/None)
-  - `subqueries`: LLM-generated optimized queries
-  - `human_in_the_loop_decision`: HITLDecision with `next_node` field (Literal["query_optimizer", "info_retriever"])
-  - `retrieved_documents` & `retrieved_metadatas`: Vector store results
-  - `summary`: Final LLM summary
+  - `user_command`: Command type (Create/Update/None)
+  - QA-specific: `subqueries`, `human_in_the_loop_decision`, `retrieved_documents`, `retrieved_metadatas`, `summary`
+  - Discovery-specific: `cluster_summaries`, `summary_of_summaries`
 - `HITLDecision` is a Pydantic BaseModel for structured routing decisions
 
-**Node Architecture** (`src/pairreader/nodes.py`)
+**Node Architecture**
+Nodes are organized into three files:
+
+1. **`pairreader_nodes.py`** - Supervisor-level nodes
+   - `KnowledgeBaseHandler`: Manages file uploads and vector store initialization
+   - `QADiscoveryRouter`: Routes queries to QA or Discovery agent using Command primitive
+
+2. **`qa_nodes.py`** - QA Agent nodes
+   - `QueryOptimizer`: Decomposes queries using LLM (configurable via `query_decomposition` param). When `query_decomposition=False`, passes through original query WITHOUT calling LLM.
+   - `HumanInTheLoopApprover`: Uses `interrupt()` for user interaction, returns structured `HITLDecision`
+   - `InfoRetriever`: Queries ChromaDB with subqueries
+   - `InfoSummarizer`: Generates final response using LLM
+
+3. **`discovery_nodes.py`** - Discovery Agent nodes
+   - `MapSummarizer`: Samples documents, clusters them, and summarizes each cluster in parallel using `asyncio.gather()`
+   - `ReduceSummarizer`: Summarizes the cluster summaries into a final overview
+
+**Common Node Patterns**:
 - All nodes inherit from `ParamsMixin` to support dynamic parameter updates via `set_params(**kwargs)`
 - All node `__call__` methods are decorated with `@logging_verbosity` and `@langgraph_stream_verbosity`
-- Node classes:
-  - `KnowledgeBaseHandler`: Manages file uploads and vector store initialization
-  - `QueryOptimizer`: Decomposes queries using LLM (configurable via `query_decomposition` param)
-  - `HumanInTheLoopApprover`: Uses `interrupt()` for user interaction, returns structured `HITLDecision`
-  - `InfoRetriever`: Queries ChromaDB with subqueries
-  - `InfoSummarizer`: Generates final response using LLM
 
 **Utility Decorators** (`src/pairreader/utils.py`)
 - `@logging_verbosity`: Logs start/finish of node execution (optional debug param)
@@ -82,8 +130,12 @@ The application uses a LangGraph StateGraph with the following node sequence:
 
 **Document Processing**
 - `DocParser` (`src/pairreader/docparser.py`): Uses Docling's `DocumentConverter` and `HybridChunker`
-- `VectorStore` (`src/pairreader/vectorestore.py`): ChromaDB client with persistent storage in `./chroma` directory
-- Default collection name: `"knowledge_base"`
+- `VectorStore` (`src/pairreader/vectorestore.py`):
+  - ChromaDB client with persistent storage in `./chroma` directory
+  - Default collection name: `"knowledge_base"`
+  - Discovery-specific methods:
+    - `get_sample()`: Random sampling of document IDs for clustering
+    - `get_clusters()`: Async parallel cluster creation using semantic similarity and HDBSCAN
 
 **Chainlit Integration** (`src/pairreader/__main__.py`)
 - Entry point with `main()` function for CLI command
@@ -99,19 +151,31 @@ The application uses a LangGraph StateGraph with the following node sequence:
 
 Commands are triggered via Chainlit commands `/Create` or `/Update`, or via starter buttons in UI
 
-### Key Features
+### Key Features by Agent
 
-**Query Optimization** (configurable in settings)
-- `query_decomposition`: Breaks complex queries into sub-queries using LLM
-- User can revise/approve subqueries or request regeneration via human-in-the-loop
+**QA Agent Features**
+- **Query Optimization** (configurable in settings):
+  - `query_decomposition`: Breaks complex queries into sub-queries using LLM
+  - When disabled, passes through original query directly to vector store
+- **Human-in-the-Loop**: User can revise/approve subqueries or request regeneration
+- **Targeted Retrieval**: Uses optimized queries to retrieve relevant document chunks
 
-**Document Ingestion**
+**Discovery Agent Features**
+- **Map-Reduce Summarization**:
+  - Samples documents from vector store (configurable via `n_sample` or `p_sample`)
+  - Clusters documents using semantic similarity (HDBSCAN algorithm)
+  - Summarizes each cluster in parallel (map phase)
+  - Combines cluster summaries into comprehensive overview (reduce phase)
+- **Configurable Parameters**:
+  - `cluster_percentage`, `min_cluster_size`, `max_cluster_size` for clustering control
+
+**Document Ingestion** (Common)
 - Accepts PDF and text files
 - Max 5 files, 10MB each
 - Files are chunked and stored with metadata (filename)
 - Chunks are contextualized using `HybridChunker.contextualize()`
 
-**Interrupts and Timeouts**
+**Interrupts and Timeouts** (Common)
 - File upload prompts have 90s timeout
 - Uses LangGraph `interrupt()` for user interaction
 - When timeout occurs, user can continue with existing knowledge base
@@ -173,12 +237,16 @@ class NodeName(ParamsMixin):
 ```
 
 ### Important Patterns
-- Node classes are instantiated as tuples in `PairReaderAgent.__init__`: `("node_name", NodeInstance())`
-- When accessing nodes from `self.nodes` list, use `node[1]` to get the instance (e.g., in `set_params()`)
-- LLM nodes use a `@property` for `llm` to ensure fresh initialization with current params
-- State updates return a dict with only the keys being updated
-- Use `interrupt()` from `langgraph.types` to pause workflow for user input
-- Structured outputs use Pydantic BaseModel (see `HITLDecision`)
+- **Agent instantiation**: All three agents (PairReaderAgent, QAAgent, DiscoveryAgent) follow the same pattern:
+  - Node classes are instantiated as tuples: `("node_name", NodeInstance())`
+  - When accessing nodes from `self.nodes` list, use `node[1]` to get the instance (e.g., in `set_params()`)
+  - Each agent has its own `InMemorySaver` checkpointer
+- **LLM initialization**: LLM nodes use a `@property` for `llm` to ensure fresh initialization with current params
+- **State updates**: Return a dict with only the keys being updated (not the full state)
+- **Interrupts**: Use `interrupt()` from `langgraph.types` to pause workflow for user input
+- **Structured outputs**: Use Pydantic BaseModel for routing decisions (see `HITLDecision`)
+- **Command-based routing**: Router nodes return `Command(goto="target", update={...})` for dynamic navigation
+- **Parallel execution**: DiscoveryAgent uses `asyncio.gather()` to summarize clusters in parallel
 
 ### Error Handling
 - Use try/except with logger.error() for error handling (see `docparser.py`)
@@ -196,3 +264,4 @@ class NodeName(ParamsMixin):
 - Validate distance metric compatibility with embedding model
 - Move authentication to database with hashed passwords
 - Explore OAuth and header-based authentication
+- **DiscoveryAgent**: Improve sampling-clustering algorithm to ensure entire knowledge base is covered (currently samples may not cover all documents)
