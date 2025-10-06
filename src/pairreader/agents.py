@@ -16,10 +16,10 @@ class PairReaderAgent:
         self.checkpointer = InMemorySaver()
         self.builder = StateGraph(PairReaderState)
         self.nodes = [
-            ("knowledge_base_handler", KnowledgeBaseHandler(self.docparser, self.vectorstore))
-            ("qa_discovery_router", QADiscoveryRouter())
-            ("qa_agent", QAAgent())
-            ("discovery_agent", DiscoveryAgent())
+            ("knowledge_base_handler", KnowledgeBaseHandler(self.docparser, self.vectorstore)),
+            ("qa_discovery_router", QADiscoveryRouter()),
+            ("qa_agent", QAAgent(self.vectorstore)),
+            ("discovery_agent", DiscoveryAgent(self.vectorstore))
         ]
         for node in self.nodes:
             setattr(self, node[0], node[1])
@@ -29,15 +29,17 @@ class PairReaderAgent:
         self.workflow = self.builder.compile(checkpointer=self.checkpointer)
 
     async def __call__(self, input: Dict, config: Dict) -> PairReaderState:
-        await self.workflow.ainvoke(input=input, config=config)
-        
+        return await self.workflow.ainvoke(input=input, config=config)
+
     def set_params(self, **params):
         for node in self.nodes:
             node[1].set_params(**params)
 
 
+# TODO: the algorithm to sample-cluster the data in knowledge base doesn't ensure entire data is covered.
 class DiscoveryAgent:
-    def __init__(self):
+    def __init__(self, vectorstore: VectorStore):
+        self.vectorstore = vectorstore
         self.checkpointer = InMemorySaver()
         self.builder = StateGraph(PairReaderState)
         self.nodes = [
@@ -53,14 +55,15 @@ class DiscoveryAgent:
         self.workflow = self.builder.compile(checkpointer=self.checkpointer)
 
     async def __call__(self, input: Dict, config: Dict) -> PairReaderState:
-        await self.workflow.ainvoke(input=input, config=config)
+        return await self.workflow.ainvoke(input=input, config=config)
 
     def set_params(self, **params):
         for node in self.nodes:
             node[1].set_params(**params)
 
 class QAAgent:
-    def __init__(self):
+    def __init__(self, vectorstore: VectorStore):
+        self.vectorstore = vectorstore
         self.checkpointer = InMemorySaver()
         self.builder = StateGraph(PairReaderState)
         self.nodes = [
@@ -80,12 +83,12 @@ class QAAgent:
         self.workflow = self.builder.compile(checkpointer=self.checkpointer)
 
     async def __call__(self, input: Dict, config: Dict) -> PairReaderState:
-        await self.workflow.ainvoke(input=input, config=config)
+        return await self.workflow.ainvoke(input=input, config=config)
 
     @staticmethod
     def route_after_human_in_the_loop_approver(state: PairReaderState) -> Literal["query_optimizer", "info_retriever"]:
         """Route based on structured output decision from human in the loop approver node."""
-        if state["human_in_the_loop_decision"].next_node is not None:
+        if state.get("human_in_the_loop_decision") and state["human_in_the_loop_decision"].next_node:
             return state["human_in_the_loop_decision"].next_node
         else:
             return "info_retriever"

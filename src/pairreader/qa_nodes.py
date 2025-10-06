@@ -63,10 +63,15 @@ class QueryOptimizer(ParamsMixin):
                     await msg.stream_token(chunk.content)
             await msg.update()
             response = AIMessage(content=msg.content)
-        state_update = {
-            "messages": [response],
-            "subqueries": [s.strip() for s in response.content.split("\n") if s.strip()]
-        }
+            state_update = {
+                "messages": [response],
+                "subqueries": [s.strip() for s in response.content.split("\n") if s.strip()]
+            }
+        else:
+            # No decomposition, use original query
+            state_update = {
+                "subqueries": [state["user_query"]]
+            }
         return state_update
     
 
@@ -102,14 +107,14 @@ class HumanInTheLoopApprover(ParamsMixin):
     # @cl.step(type="ChainlitHumanReviser", name="ChainlitHumanReviser")
     async def __call__(self, state: PairReaderState, *args, **kwds) -> Dict[str, Any]:
         """Request user revision of LLM subqueries."""
-        ask_feedback_prompt = f"Please revise the llm genrated subqueries, please state explicitly if approve or disapprove these results!"
+        ask_feedback_prompt = f"Please revise the LLM generated subqueries, please state explicitly if approve or disapprove these results!"
         user_feedback = await cl.AskUserMessage(
             content=ask_feedback_prompt,
             timeout=90
         ).send()
         # if the user doesn't answer at timeout
         if user_feedback is None:
-            await cl.Message("You haven't revised the LLM genrated subqueries in the following 90s, we're using them as they are!").send()
+            await cl.Message("You haven't revised the LLM generated subqueries in the following 90s, we're using them as they are!").send()
             state_update = {"human_in_the_loop_decision": None}
         else:
             state["messages"].append(AIMessage(content=ask_feedback_prompt))

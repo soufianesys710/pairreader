@@ -7,14 +7,14 @@ from langchain_core.messages import AIMessage, SystemMessage, HumanMessage, Tool
 from langchain_core.tools import tool, InjectedToolCallId, InjectedToolArg
 from langgraph.prebuilt import InjectedState
 from langgraph.types import interrupt, Command
-from typing import List, Optional, Dict, Any, Annotated
+from typing import List, Optional, Dict, Any, Annotated, Literal
 import chainlit as cl
 
 class KnowledgeBaseHandler(ParamsMixin):
     """
     Handles knowledge base commands (Create, Update) and file upload logic.
 
-    - Updates state with chainlit_command and processes file ingestion.
+    - Updates state with user_command and processes file ingestion.
     - Prompts user to upload files and ingests them into the vector store.
     - Interrupts flow if no files are uploaded within timeout.
     """
@@ -28,8 +28,8 @@ class KnowledgeBaseHandler(ParamsMixin):
     async def __call__(self, state: PairReaderState, *args, **kwds):
         """Handle Chainlit commands and file uploads."""
         # if the user sends a command
-        if (chainlit_command := state.get("chainlit_command")):
-            if chainlit_command == "Create":
+        if (user_command := state.get("user_command")):
+            if user_command == "Create":
                 self.vectorstore.flush()
             files = await cl.AskFileMessage(
                 content="Please upload your files to help out reading!",
@@ -40,7 +40,7 @@ class KnowledgeBaseHandler(ParamsMixin):
             ).send()
             if files is None:
                 await cl.Message(
-                    f"You haven't uploaded any files in the 60s following your {chainlit_command} command!"
+                    f"You haven't uploaded any files in the 60s following your {user_command} command!"
                     "You can continue to use the your current knowledge base, or resend a Create or Update command described in the toolbox"
                 )
                 interrupt()
@@ -62,7 +62,10 @@ class KnowledgeBaseHandler(ParamsMixin):
 
 
 class QADiscoveryRouter(ParamsMixin):
-    def __init__(self, llm_name: str, fallback_llm_name: str):
+    def __init__(self,
+        llm_name: str = "anthropic:claude-3-5-haiku-latest",
+        fallback_llm_name: str = "anthropic:claude-3-7-sonnet-latest"
+    ):
         self.llm_name = llm_name
         self.fallback_llm_name = fallback_llm_name
 
@@ -82,9 +85,12 @@ class QADiscoveryRouter(ParamsMixin):
                 )
             ])
         )
-    def __call__(self, state:PairReaderState):
+    
+    @logging_verbosity
+    @langgraph_stream_verbosity
+    async def __call__(self, state: PairReaderState) -> Command[Literal["qa_agent", "discovery_agent"]]:
         route_prompt = """
-        Your are a pair-reader agent that helps the user chat with information from a knowledge base.
+        You are a pair-reader agent that helps the user chat with information from a knowledge base.
         You have two sub-agents: a QAAgent and a DiscoveryAgent.
         The QAAgent is able to answer specific questions based on available information in the knowledge base. Basically when the user knows what he's looking for.
         The DiscoveryAgent is able to help the user discover information in the knowledge base, provide overview, summary, etc. Basically when the user doesn't know what he's looking for.
@@ -94,7 +100,7 @@ class QADiscoveryRouter(ParamsMixin):
             SystemMessage(content=route_prompt),
             HumanMessage(content=f"User query: {state['user_query']}")
         ]
-        response = self.llm.invoke(messages)
+        response = await self.llm.ainvoke(messages)
         return response
 
 
