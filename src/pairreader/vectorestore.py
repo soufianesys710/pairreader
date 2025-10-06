@@ -122,27 +122,34 @@ class VectorStore:
         results = self.collection.query(**query_args)
         return results
 
-    def get_sample(self, percentage: float) -> List[str]:
+    def get_sample(self, n_samples: Optional[int] = None, percentage: Optional[float] = None) -> List[str]:
         """
-        Sample a percentage of document IDs from the collection.
+        Sample document IDs from the collection.
 
         Args:
-            percentage: Percentage of documents to sample (0.0 to 1.0).
+            n_samples: Exact number of samples to retrieve. Takes precedence over percentage.
+            percentage: Percentage of documents to sample (0.0 to 1.0). Used if n_samples is None.
 
         Returns:
             List of sampled document IDs.
         """
-        if not 0.0 <= percentage <= 1.0:
-            raise ValueError("Percentage must be between 0.0 and 1.0")
-
-        # Get all document IDs and Calculate sample size
         all_ids = self.get_all_ids()
-        sample_size = max(1, int(len(all_ids) * percentage))
+
+        if n_samples is not None:
+            if n_samples < 1:
+                raise ValueError("n_samples must be at least 1")
+            sample_size = min(n_samples, len(all_ids))
+            self.logger.info(f"Sampling {sample_size} documents (requested: {n_samples}) from {len(all_ids)} total")
+        elif percentage is not None:
+            if not 0.0 <= percentage <= 1.0:
+                raise ValueError("Percentage must be between 0.0 and 1.0")
+            sample_size = max(1, int(len(all_ids) * percentage))
+            self.logger.info(f"Sampled {sample_size} documents ({percentage*100:.1f}%) from {len(all_ids)} total")
+        else:
+            raise ValueError("Either n_samples or percentage must be provided")
 
         # Random sample
         sampled_ids = random.sample(all_ids, sample_size)
-        self.logger.info(f"Sampled {len(sampled_ids)} documents ({percentage*100:.1f}%) from {len(all_ids)} total")
-
         return sampled_ids
 
     async def _query_cluster(self, sample_id: str, cluster_size: int, cluster_idx: int) -> Optional[List[str]]:
@@ -183,7 +190,13 @@ class VectorStore:
             self.logger.warning(f"Cluster {cluster_idx}: No results found for sample ID {sample_id}")
             return None
 
-    async def get_clusters(self, sample_ids: List[str], percentage: float) -> List[List[str]]:
+    async def get_clusters(
+        self,
+        sample_ids: List[str],
+        percentage: float,
+        min_cluster_size: Optional[int] = None,
+        max_cluster_size: Optional[int] = None
+    ) -> List[List[str]]:
         """
         Create semantic clusters by using sample documents as query points.
         Queries are performed in parallel for efficiency.
@@ -191,6 +204,8 @@ class VectorStore:
         Args:
             sample_ids: List of document IDs to use as cluster centers.
             percentage: Percentage of total documents to retrieve per cluster (0.0 to 1.0).
+            min_cluster_size: Minimum number of documents per cluster. Overrides percentage lower bound.
+            max_cluster_size: Maximum number of documents per cluster. Overrides percentage upper bound.
 
         Returns:
             List of clusters, where each cluster is a list of document IDs.
@@ -198,11 +213,23 @@ class VectorStore:
         if not 0.0 <= percentage <= 1.0:
             raise ValueError("Percentage must be between 0.0 and 1.0")
 
-        # Get total document count and calculate cluster size
+        # Get total document count and calculate cluster size from percentage
         total_docs = self.get_len_docs()
         cluster_size = max(1, int(total_docs * percentage))
 
-        self.logger.info(f"Building {len(sample_ids)} clusters with size {cluster_size} each")
+        # Apply min/max constraints
+        if min_cluster_size is not None:
+            cluster_size = max(cluster_size, min_cluster_size)
+        if max_cluster_size is not None:
+            cluster_size = min(cluster_size, max_cluster_size)
+
+        # Ensure at least 1 document per cluster
+        cluster_size = max(1, cluster_size)
+
+        self.logger.info(
+            f"Building {len(sample_ids)} clusters with size {cluster_size} each "
+            f"(percentage={percentage}, min={min_cluster_size}, max={max_cluster_size})"
+        )
 
         # Build clusters in parallel
         tasks = [

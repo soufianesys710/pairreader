@@ -40,7 +40,7 @@ class KnowledgeBaseHandler(ParamsMixin):
             if files is None:
                 await cl.Message(
                     f"You haven't uploaded any files in the 60s following your {chainlit_command} command!"
-                    "You can continue to use the your ciurrent knowledge base, or resend a Create or Update command described in the toolbox"
+                    "You can continue to use the your current knowledge base, or resend a Create or Update command described in the toolbox"
                 )
                 interrupt()
             else:
@@ -50,8 +50,9 @@ class KnowledgeBaseHandler(ParamsMixin):
                     metadatas = [{"fname": f.name}] * len(chunks)
                     self.vectorstore.ingest_chunks(chunks, metadatas)
                 # files uploaded and parsed, ask for a user query
+                len_docs = self.vectorstore.get_len_docs()
                 await cl.Message(
-                    f"Files uploaded: {[f.name for f in files]}, the knowledge base is ready. What do you want to know?"
+                    f"Files uploaded: {[f.name for f in files]}. Knowledge base now contains {len_docs} document chunks. What do you want to know?"
                 )
                 interrupt()
         # the user doesn't send a command, rather he should've sent a message, don't update the state
