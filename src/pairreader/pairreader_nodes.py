@@ -3,9 +3,8 @@ from pairreader.vectorestore import VectorStore
 from pairreader.docparser import DocParser
 from pairreader.utils import logging_verbosity, langgraph_stream_verbosity, ParamsMixin
 from langchain.chat_models import init_chat_model
-from langchain_core.messages import AIMessage, SystemMessage, HumanMessage, ToolMessage
-from langchain_core.tools import tool, InjectedToolCallId, InjectedToolArg
-from langgraph.prebuilt import InjectedState
+from langchain_core.messages import AIMessage, SystemMessage, HumanMessage
+from langchain_core.tools import tool
 from langgraph.types import interrupt, Command
 from typing import List, Optional, Dict, Any, Annotated, Literal
 import chainlit as cl
@@ -74,13 +73,13 @@ class QADiscoveryRouter(ParamsMixin):
         return (
             init_chat_model(self.llm_name)
             .bind_tools(
-                tools=[self.qa_agent_handoff, self.discovery_agent_handoff], 
+                tools=[self.qa_agent, self.discovery_agent], 
                 parallel_tool_calls=False
             )
             .with_fallbacks([
                 init_chat_model(self.fallback_llm_name)
                 .bind_tools(
-                    tools=[self.qa_agent_handoff, self.discovery_agent_handoff], 
+                    tools=[self.qa_agent, self.discovery_agent], 
                     parallel_tool_calls=False
                 )
             ])
@@ -88,50 +87,43 @@ class QADiscoveryRouter(ParamsMixin):
     
     @logging_verbosity
     @langgraph_stream_verbosity
-    async def __call__(self, state: PairReaderState) -> Command[Literal["qa_agent", "discovery_agent"]]:
+    async def __call__(self, state: PairReaderState) -> Command:
         route_prompt = """
-        You are a pair-reader agent that helps the user chat with information from a knowledge base.
-        You have two sub-agents: a QAAgent and a DiscoveryAgent.
-        The QAAgent is able to answer specific questions based on available information in the knowledge base. Basically when the user knows what he's looking for.
-        The DiscoveryAgent is able to help the user discover information in the knowledge base, provide overview, summary, etc. Basically when the user doesn't know what he's looking for.
-        You are given a user query. You have to decide whether to route the query to the QAAgent or the DiscoveryAgent, then the sub-agents take over.
+        You are a pair-reader agent that helps users chat with information from a knowledge base containing their uploaded documents.
+        You have two sub-agents: QAAgent (DEFAULT) and DiscoveryAgent (SPECIAL CASES ONLY).
+
+        **QAAgent (DEFAULT)** - Use for ALL regular questions and information requests:
+        - Any question seeking specific information from the documents
+        - Questions asking "what", "how", "why", "when", "where" about content
+        - Requests to explain concepts, summarize specific topics, or find information
+        - Examples: "What does this say about X?", "Explain Y", "How many Z are mentioned?"
+
+        **DiscoveryAgent (SPECIAL CASES ONLY)** - Use ONLY when user explicitly requests exploration:
+        - User explicitly asks for: "overview", "explore", "discover", "main themes", "main ideas", "key ideas", "overall summary"
+        - User wants high-level exploration without specific questions
+        - Examples: "Give me an overview", "What are the main themes?", "Explore the documents"
+
+        IMPORTANT: Default to QAAgent unless the user explicitly uses exploration keywords.
+        Most queries should go to QAAgent - it handles all regular information requests.
         """
         messages = [
             SystemMessage(content=route_prompt),
             HumanMessage(content=f"User query: {state['user_query']}")
         ]
         response = await self.llm.ainvoke(messages)
-        return response
-
-
-    @tool(description="Handoff to QAAgent")
-    def qa_agent_handoff(
-        state: Annotated[PairReaderState, InjectedState], 
-        tool_call_id: Annotated[str, InjectedToolCallId]
-    ) -> Command:
-        """Use this to handoff to QA agent."""
-        tool_message = ToolMessage(
-            content="Handoff to QAAgent",
-            name="qa_agent_handoff",
-            tool_call_id=tool_call_id,
-        )
+        tool_call = response.tool_calls[0]
         return Command(
-            goto="qa_agent",  
-            update={"messages": [tool_message]},
+            goto=tool_call["name"], 
+            update={"messages": [AIMessage(content=f"Routing to {tool_call['name']}")]}
         )
 
-    @tool(description="Handoff to DiscoveryAgent")
-    def discovery_agent_handoff(
-        state: Annotated[PairReaderState, InjectedState],
-        tool_call_id: Annotated[str, InjectedToolCallId]
-    ) -> Command:
-        """Use this to handoff to discovery agent."""
-        tool_message = ToolMessage(
-            content="Handoff to DiscoveryAgent",
-            name="discovery_agent_handoff",
-            tool_call_id=tool_call_id,
-        )
-        return Command(
-            goto="discovery_agent",  
-            update={"messages": [tool_message]},
-        )
+
+    @tool(description="Handoff to QAAgent - Use for ALL regular questions and information requests (DEFAULT)")
+    def qa_agent():
+        """Use this to handoff to QA agent for regular questions. This is the DEFAULT agent."""
+        return "qa_agent"
+
+    @tool(description="Handoff to DiscoveryAgent - Use ONLY when user explicitly requests overview/themes/exploration")
+    def discovery_agent():
+        """Use this to handoff to discovery agent ONLY for explicit exploration requests (overview, themes, key ideas, etc.)."""
+        return "discovery_agent"

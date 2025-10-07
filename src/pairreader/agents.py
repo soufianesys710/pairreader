@@ -7,6 +7,7 @@ from pairreader.pairreader_nodes import KnowledgeBaseHandler, QADiscoveryRouter
 from langgraph.graph.state import StateGraph
 from langgraph.graph import START, END
 from langgraph.checkpoint.memory import InMemorySaver
+from langchain_core.runnables import RunnableConfig
 from typing import Any, Optional, Literal, Dict
 
 class PairReaderAgent:
@@ -26,9 +27,11 @@ class PairReaderAgent:
             self.builder.add_node(node[0], node[1])
         self.builder.add_edge(START, "knowledge_base_handler")
         self.builder.add_edge("knowledge_base_handler", "qa_discovery_router")
+        self.builder.add_edge("qa_agent", END)
+        self.builder.add_edge("discovery_agent", END)
         self.workflow = self.builder.compile(checkpointer=self.checkpointer)
 
-    async def __call__(self, input: Dict, config: Dict) -> PairReaderState:
+    async def __call__(self, input: Dict, config: RunnableConfig) -> PairReaderState:
         return await self.workflow.ainvoke(input=input, config=config)
 
     def set_params(self, **params):
@@ -54,7 +57,7 @@ class DiscoveryAgent:
         self.builder.add_edge("reduce_summarizer", END)
         self.workflow = self.builder.compile(checkpointer=self.checkpointer)
 
-    async def __call__(self, input: Dict, config: Dict) -> PairReaderState:
+    async def __call__(self, input: Dict, config: RunnableConfig) -> PairReaderState:
         return await self.workflow.ainvoke(input=input, config=config)
 
     def set_params(self, **params):
@@ -82,7 +85,7 @@ class QAAgent:
         self.builder.add_edge("info_summarizer", END)
         self.workflow = self.builder.compile(checkpointer=self.checkpointer)
 
-    async def __call__(self, input: Dict, config: Dict) -> PairReaderState:
+    async def __call__(self, input: Dict, config: RunnableConfig) -> PairReaderState:
         return await self.workflow.ainvoke(input=input, config=config)
 
     @staticmethod
