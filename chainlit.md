@@ -32,8 +32,28 @@ To **Update** or **Create**, click the buttons at startup or use commands: **/Up
 ## 🎨 Customize Your Experience
 
 Click the **Settings** icon to adjust:
-- LLM model (Haiku for speed, Sonnet for power)
-- Query decomposition (breaks complex questions into focused searches)
-- Number of document chunks to retrieve
+
+### General Settings
+- **LLM model** - Choose Haiku for speed or Sonnet for power
+- **Query decomposition** - Breaks complex questions into focused searches (recommended: ON)
+- **Number of documents** - How many document chunks to retrieve (default: 10)
+
+### Discovery Agent Settings
+These settings control how the Discovery Agent explores your documents when you ask for overviews or themes:
+
+**Sampling (choose one approach):**
+- **n_sample** - Exact number of documents to sample (set to 0 to use percentage instead)
+- **p_sample** - Percentage of documents to sample (default: 0.1 = 10%)
+  - ⚠️ If `n_sample` is set above 0, it takes priority over `p_sample`
+
+**Clustering:**
+- **cluster_percentage** - Controls cluster granularity (default: 0.05 = 5%)
+  - Lower values = more clusters (more detailed)
+  - Higher values = fewer clusters (more general)
+- **min_cluster_size** - Minimum documents per cluster (0 = auto)
+- **max_cluster_size** - Maximum documents per cluster (0 = auto)
+  - ⚠️ Leave both at 0 for automatic sizing (recommended)
+
+💡 **Tip:** Start with defaults and only adjust if you need more/less detail in discovery results.
 
 **Happy reading!** 📖✨
