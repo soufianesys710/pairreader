@@ -2,8 +2,9 @@ from langgraph.config import get_stream_writer
 from langgraph.graph.state import StateGraph
 from langchain_core.runnables import RunnableConfig
 from functools import wraps
-from typing import Dict, List, Tuple, Any
+from typing import Dict, List, Tuple, Any, Literal, Optional, Union
 import logging
+import chainlit as cl
 
 def logging_verbosity(func=None, *, debug=False):
 	"""
@@ -54,6 +55,60 @@ class ParamsMixin:
 
     def get_params(self):
         return {key: value for key, value in self.__dict__.items() if not key.startswith("_")}
+
+
+class UserIO:
+    """Handle user input/output operations, abstracting away UI framework details."""
+
+    async def ask(self, type: Literal["text", "file"], message: str, timeout: Optional[int] = None) -> Union[str, List[Any]]:
+        """
+        Ask the user for input.
+
+        Args:
+            type: Type of input to request ("text" or "file")
+            message: Message to display to the user
+            timeout: Optional timeout in seconds
+
+        Returns:
+            For "text": The user's text response
+            For "file": List of uploaded files
+        """
+        if type == "text":
+            res = await cl.AskUserMessage(content=message, timeout=timeout).send()
+            return res["output"] if res else ""
+        elif type == "file":
+            res = await cl.AskFileMessage(content=message, timeout=timeout, max_files=5, max_size_mb=10).send()
+            return res if res else []
+        else:
+            raise ValueError(f"Unknown ask type: {type}")
+
+    async def send(self, message: str, stream: bool = False):
+        """
+        Send a message to the user.
+
+        Args:
+            message: Message to send
+            stream: Whether to stream the message (for future use)
+        """
+        await cl.Message(content=message).send()
+
+    async def stream(self, llm, messages) -> str:
+        """
+        Stream LLM response to the user.
+
+        Args:
+            llm: The language model to stream from
+            messages: The messages to send to the LLM
+
+        Returns:
+            The complete streamed content
+        """
+        cl_msg = cl.Message(content="")
+        async for chunk in llm.astream(messages):
+            if chunk.content:
+                await cl_msg.stream_token(chunk.content)
+        await cl_msg.update()
+        return cl_msg.content
 
 
 class BaseAgent:

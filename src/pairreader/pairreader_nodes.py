@@ -1,15 +1,14 @@
 from pairreader.schemas import PairReaderState
 from pairreader.vectorestore import VectorStore
 from pairreader.docparser import DocParser
-from pairreader.utils import logging_verbosity, langgraph_stream_verbosity, ParamsMixin
+from pairreader.utils import logging_verbosity, langgraph_stream_verbosity, ParamsMixin, UserIO
 from langchain.chat_models import init_chat_model
 from langchain_core.messages import AIMessage, SystemMessage, HumanMessage
 from langchain_core.tools import tool
 from langgraph.types import interrupt, Command
 from typing import List, Optional, Dict, Any, Annotated, Literal
-import chainlit as cl
 
-class KnowledgeBaseHandler(ParamsMixin):
+class KnowledgeBaseHandler(UserIO, ParamsMixin):
     """
     Handles knowledge base commands (Create, Update) and file upload logic.
 
@@ -30,15 +29,13 @@ class KnowledgeBaseHandler(ParamsMixin):
         if (user_command := state.get("user_command")):
             if user_command == "Create":
                 self.vectorstore.flush()
-            files = await cl.AskFileMessage(
-                content="Please upload your files to help out reading!",
-                accept=["text/plain", "application/pdf"],
-                max_size_mb=10,
-                max_files=5,
+            files = await self.ask(
+                type="file",
+                message="Please upload your files to help out reading!",
                 timeout=90
-            ).send()
-            if files is None:
-                await cl.Message(
+            )
+            if not files:
+                await self.send(
                     f"You haven't uploaded any files in the 60s following your {user_command} command!"
                     "You can continue to use the your current knowledge base, or resend a Create or Update command described in the toolbox"
                 )
@@ -51,7 +48,7 @@ class KnowledgeBaseHandler(ParamsMixin):
                     self.vectorstore.ingest_chunks(chunks, metadatas)
                 # files uploaded and parsed, ask for a user query
                 len_docs = self.vectorstore.get_len_docs()
-                await cl.Message(
+                await self.send(
                     f"Files uploaded: {[f.name for f in files]}. Knowledge base now contains {len_docs} document chunks. What do you want to know?"
                 )
                 interrupt()
