@@ -92,22 +92,26 @@ PairReader uses a **three-tier LangGraph multi-agent system**:
    - Manages knowledge base operations (Create/Update/Query)
    - Routes queries to specialized sub-agents using LangGraph's Command primitive
 
-2. **QAAgent** - For answering specific questions
+2. **QAAgent** - **DEFAULT agent** for answering questions
    - Query optimization and decomposition (optional)
    - Human-in-the-loop review of subqueries
    - Targeted document retrieval from vector store
    - Answer synthesis
+   - Handles all regular information requests
 
-3. **DiscoveryAgent** - For exploration and overview
+3. **DiscoveryAgent** - For explicit exploration only
    - Document sampling and clustering using HDBSCAN
    - Parallel map-reduce summarization
    - Comprehensive content overview
+   - Triggered only by explicit exploration keywords (overview, themes, discover, etc.)
 
 ### Intelligent Routing
 
 The system automatically routes your query to the appropriate agent:
-- **"What does chapter 3 say about climate change?"** → QAAgent (specific question)
-- **"What are the main themes in these documents?"** → DiscoveryAgent (exploration)
+- **Most queries** → QAAgent (default for all questions and information requests)
+- **"Give me an overview of the documents"** → DiscoveryAgent (explicit exploration)
+- **"What are the main themes?"** → DiscoveryAgent (explicit theme exploration)
+- **"What does this say about climate change?"** → QAAgent (specific information request)
 
 ### Technology Stack
 - **UI Framework**: Chainlit for interactive chat interface
@@ -118,12 +122,12 @@ The system automatically routes your query to the appropriate agent:
 
 ## 💡 Tips for Best Results
 
-- **Choose your question style**: Ask specific questions for precise answers, or broad questions for overviews
-- **Use context**: Reference specific topics or sections when you know them
+- **Ask natural questions**: The QA agent (default) handles most information requests automatically
+- **Use explicit exploration keywords**: Say "overview", "main themes", "key ideas", or "explore" to trigger Discovery mode
 - **Iterate**: If the first answer isn't perfect, refine your question based on what you learned
 - **Organize your knowledge base**: Use Create mode to start fresh when switching to a completely different topic
-- **Review subqueries** (QA mode): When your question is decomposed, review the subqueries—it helps you understand what's being searched
-- **Explore your documents** (Discovery mode): Ask for summaries and themes to get a big-picture view
+- **Review subqueries**: When your question is decomposed, review the subqueries—it helps you understand what's being searched
+- **Start with exploration**: Use Discovery mode first with new documents to understand what's available
 
 ## 🔧 Development
 

@@ -17,16 +17,17 @@ To **Update** or **Create**, click the buttons at startup or use commands: **/Up
 1. **First time?** Click **Create** to upload your documents
 2. **Upload files** (supports PDF and text files, up to 5 files at a time)
 3. **Ask questions** - PairReader intelligently routes your query:
-   - **Specific questions** (e.g., "What does chapter 3 say about X?") → Targeted search and answer
-   - **Exploration requests** (e.g., "What are the main themes?") → Comprehensive overview
+   - **Most questions** (default) → QA Agent provides targeted answers
+   - **Explicit exploration** (e.g., "Give me an overview" or "What are the main themes?") → Discovery Agent provides comprehensive exploration
 
 ## 💡 Tips
 
 - **Upload related documents** to connect ideas across them
-- **Use natural language** - talk like you would to a person
-- **Ask specific questions** for precise answers, or broad questions for overviews
+- **Ask natural questions** - the QA agent handles most requests automatically
+- **For exploration, be explicit** - say "overview", "main themes", "key ideas", or "explore the documents"
 - **Review subqueries** when prompted - it helps you see how your question is being analyzed
 - **Use "Create"** to start fresh when switching to a completely different topic
+- **Start with exploration** on new documents to understand what's available
 
 ## 🎨 Customize Your Experience
 
