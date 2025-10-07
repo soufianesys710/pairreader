@@ -4,89 +4,68 @@ from pairreader.schemas import PairReaderState
 from pairreader.qa_nodes import QueryOptimizer, HumanInTheLoopApprover, InfoRetriever, InfoSummarizer
 from pairreader.discovery_nodes import MapSummarizer, ReduceSummarizer
 from pairreader.pairreader_nodes import KnowledgeBaseHandler, QADiscoveryRouter
-from langgraph.graph.state import StateGraph
+from pairreader.utils import BaseAgent
 from langgraph.graph import START, END
 from langgraph.checkpoint.memory import InMemorySaver
-from langchain_core.runnables import RunnableConfig
-from typing import Any, Optional, Literal, Dict
+from typing import Optional, Literal
 
-class PairReaderAgent:
+class PairReaderAgent(BaseAgent):
     def __init__(self, docparser: Optional[DocParser] = None, vectorstore: Optional[VectorStore] = None):
         self.docparser = docparser or DocParser()
         self.vectorstore = vectorstore or VectorStore()
+        super().__init__(
+            PairReaderState,
+            [
+                ("knowledge_base_handler", KnowledgeBaseHandler(self.docparser, self.vectorstore)),
+                ("qa_discovery_router", QADiscoveryRouter()),
+                ("qa_agent", QAAgent(self.vectorstore)),
+                ("discovery_agent", DiscoveryAgent(self.vectorstore))
+            ]
+        )
         self.checkpointer = InMemorySaver()
-        self.builder = StateGraph(PairReaderState)
-        self.nodes = [
-            ("knowledge_base_handler", KnowledgeBaseHandler(self.docparser, self.vectorstore)),
-            ("qa_discovery_router", QADiscoveryRouter()),
-            ("qa_agent", QAAgent(self.vectorstore)),
-            ("discovery_agent", DiscoveryAgent(self.vectorstore))
-        ]
-        for node in self.nodes:
-            setattr(self, node[0], node[1])
-            self.builder.add_node(node[0], node[1])
         self.builder.add_edge(START, "knowledge_base_handler")
         self.builder.add_edge("knowledge_base_handler", "qa_discovery_router")
         self.builder.add_edge("qa_agent", END)
         self.builder.add_edge("discovery_agent", END)
         self.workflow = self.builder.compile(checkpointer=self.checkpointer)
 
-    async def __call__(self, input: Dict, config: RunnableConfig) -> PairReaderState:
-        return await self.workflow.ainvoke(input=input, config=config)
-
-    def set_params(self, **params):
-        for node in self.nodes:
-            node[1].set_params(**params)
-
 
 # TODO: the algorithm to sample-cluster the data in knowledge base doesn't ensure entire data is covered.
-class DiscoveryAgent:
+class DiscoveryAgent(BaseAgent):
     def __init__(self, vectorstore: VectorStore):
         self.vectorstore = vectorstore
+        super().__init__(
+            PairReaderState,
+            [
+                ("map_summarizer", MapSummarizer(vectorstore=self.vectorstore)),
+                ("reduce_summarizer", ReduceSummarizer()),
+            ]
+        )
         self.checkpointer = InMemorySaver()
-        self.builder = StateGraph(PairReaderState)
-        self.nodes = [
-            ("map_summarizer", MapSummarizer(vectorstore=self.vectorstore)),
-            ("reduce_summarizer", ReduceSummarizer()),
-        ]
-        for node in self.nodes:
-            setattr(self, node[0], node[1])
-            self.builder.add_node(node[0], node[1])
         self.builder.add_edge(START, "map_summarizer")
         self.builder.add_edge("map_summarizer", "reduce_summarizer")
         self.builder.add_edge("reduce_summarizer", END)
         self.workflow = self.builder.compile(checkpointer=self.checkpointer)
 
-    async def __call__(self, input: Dict, config: RunnableConfig) -> PairReaderState:
-        return await self.workflow.ainvoke(input=input, config=config)
-
-    def set_params(self, **params):
-        for node in self.nodes:
-            node[1].set_params(**params)
-
-class QAAgent:
+class QAAgent(BaseAgent):
     def __init__(self, vectorstore: VectorStore):
         self.vectorstore = vectorstore
+        super().__init__(
+            PairReaderState,
+            [
+                ("query_optimizer", QueryOptimizer(query_decomposition=True)),
+                ("info_retriever", InfoRetriever(self.vectorstore)),
+                ("human_in_the_loop_approver", HumanInTheLoopApprover()),
+                ("info_summarizer", InfoSummarizer())
+            ]
+        )
         self.checkpointer = InMemorySaver()
-        self.builder = StateGraph(PairReaderState)
-        self.nodes = [
-            ("query_optimizer", QueryOptimizer(query_decomposition=True)),
-            ("info_retriever", InfoRetriever(self.vectorstore)),
-            ("human_in_the_loop_approver", HumanInTheLoopApprover()),
-            ("info_summarizer", InfoSummarizer())
-        ]
-        for node in self.nodes:
-            setattr(self, node[0], node[1])
-            self.builder.add_node(node[0], node[1])
         self.builder.add_edge(START, "query_optimizer")
         self.builder.add_edge("query_optimizer", "human_in_the_loop_approver")
         self.builder.add_conditional_edges("human_in_the_loop_approver", self.route_after_human_in_the_loop_approver)
         self.builder.add_edge("info_retriever", "info_summarizer")
         self.builder.add_edge("info_summarizer", END)
         self.workflow = self.builder.compile(checkpointer=self.checkpointer)
-
-    async def __call__(self, input: Dict, config: RunnableConfig) -> PairReaderState:
-        return await self.workflow.ainvoke(input=input, config=config)
 
     @staticmethod
     def route_after_human_in_the_loop_approver(state: PairReaderState) -> Literal["query_optimizer", "info_retriever"]:
@@ -95,7 +74,3 @@ class QAAgent:
             return state["human_in_the_loop_decision"].next_node
         else:
             return "info_retriever"
-
-    def set_params(self, **params):
-        for node in self.nodes:
-            node[1].set_params(**params)

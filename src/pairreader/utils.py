@@ -1,5 +1,8 @@
 from langgraph.config import get_stream_writer
+from langgraph.graph.state import StateGraph
+from langchain_core.runnables import RunnableConfig
 from functools import wraps
+from typing import Dict, List, Tuple, Any
 import logging
 
 def logging_verbosity(func=None, *, debug=False):
@@ -51,4 +54,33 @@ class ParamsMixin:
 
     def get_params(self):
         return {key: value for key, value in self.__dict__.items() if not key.startswith("_")}
+
+
+class BaseAgent:
+    """Base class for LangGraph agents with common initialization and workflow patterns."""
+
+    def __init__(self, state: type, nodes: List[Tuple[str, Any]]):
+        """
+        Initialize the base agent.
+
+        Args:
+            state: The state type/class for the StateGraph (e.g., PairReaderState)
+            nodes: List of tuples (node_name, node_instance) representing graph nodes
+        """
+        self.builder = StateGraph(state)
+        self.nodes = nodes
+
+        # Register all nodes with the graph and as instance attributes
+        for node in self.nodes:
+            setattr(self, node[0], node[1])
+            self.builder.add_node(node[0], node[1])
+
+    async def __call__(self, input: Dict, config: RunnableConfig):
+        """Execute the workflow with given input and config."""
+        return await self.workflow.ainvoke(input=input, config=config)
+
+    def set_params(self, **params):
+        """Propagate parameters to all nodes that support set_params."""
+        for node in self.nodes:
+            node[1].set_params(**params)
 

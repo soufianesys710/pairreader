@@ -1,6 +1,6 @@
 [project]
 name = "pairreader"
-version = "0.1.4"
+version = "0.1.5"
 description = "Your pair reader through your books, presentations, notes and more"
 readme = "README.md"
 authors = [
