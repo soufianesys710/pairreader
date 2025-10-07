@@ -77,10 +77,19 @@ Then open your browser to `http://localhost:8000`
 
 ### Configurable Settings
 Adjust the following in the UI settings panel:
+
+**General Settings:**
 - **LLM Selection**: Choose between Claude Haiku (fast) or Sonnet (powerful)
 - **Fallback LLM**: Automatic failover if primary model is unavailable
 - **Query Decomposition**: Toggle query optimization on/off
 - **Retrieval Count**: Control how many document chunks to retrieve (5-20)
+
+**Discovery Agent Settings:**
+- **Sampling**: Choose exact count (`n_sample`) or percentage (`p_sample`) of documents to sample
+  - Note: `n_sample` takes priority if set above 0
+- **Clustering**: Fine-tune cluster granularity and size constraints
+  - `cluster_percentage`: Controls how granular the clustering is (lower = more clusters)
+  - `min_cluster_size` and `max_cluster_size`: Leave at 0 for automatic sizing (recommended)
 
 ## 🏗️ Architecture
 

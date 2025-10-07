@@ -84,6 +84,46 @@ async def on_chat_start():
                 max=20,
                 step=1,
             ),
+            Slider(
+                id="n_sample",
+                label="Discovery: Number of documents to sample (leave at 0 to use percentage)",
+                initial=0,
+                min=0,
+                max=1000,
+                step=10,
+            ),
+            Slider(
+                id="p_sample",
+                label="Discovery: Percentage of documents to sample",
+                initial=0.1,
+                min=0.05,
+                max=1.0,
+                step=0.05,
+            ),
+            Slider(
+                id="cluster_percentage",
+                label="Discovery: Cluster percentage",
+                initial=0.05,
+                min=0.01,
+                max=0.5,
+                step=0.01,
+            ),
+            Slider(
+                id="min_cluster_size",
+                label="Discovery: Minimum cluster size (leave at 0 for auto)",
+                initial=0,
+                min=0,
+                max=50,
+                step=1,
+            ),
+            Slider(
+                id="max_cluster_size",
+                label="Discovery: Maximum cluster size (leave at 0 for auto)",
+                initial=0,
+                min=0,
+                max=200,
+                step=10,
+            ),
         ]
     ).send()
 

@@ -143,7 +143,9 @@ Nodes are organized into three files:
 - Entry point with `main()` function for CLI command
 - Custom `InMemoryDataLayer` for chat history (not persisted between restarts)
 - Password authentication: username/password = "admin"/"admin" (TODO: move to secure storage)
-- Settings UI for LLM selection, query decomposition toggle, and retrieval parameters
+- Settings UI with general and discovery-specific parameters:
+  - General: LLM selection, query decomposition toggle, retrieval document count
+  - Discovery Agent: sampling parameters (`n_sample`, `p_sample`), clustering parameters (`cluster_percentage`, `min_cluster_size`, `max_cluster_size`)
 - Uses `cl.context.session.thread_id` for thread-based conversations
 
 ### Three Usage Modes
@@ -168,8 +170,9 @@ Commands are triggered via Chainlit commands `/Create` or `/Update`, or via star
   - Clusters documents using semantic similarity (HDBSCAN algorithm)
   - Summarizes each cluster in parallel (map phase)
   - Combines cluster summaries into comprehensive overview (reduce phase)
-- **Configurable Parameters**:
-  - `cluster_percentage`, `min_cluster_size`, `max_cluster_size` for clustering control
+- **Configurable Parameters** (all exposed in Chainlit settings):
+  - **Sampling**: `n_sample` (exact count) or `p_sample` (percentage). If `n_sample` > 0, it takes priority over `p_sample`
+  - **Clustering**: `cluster_percentage` (controls granularity), `min_cluster_size`, `max_cluster_size` (leave at 0 for auto-sizing)
 
 **Document Ingestion** (Common)
 - Accepts PDF and text files
