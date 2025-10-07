@@ -46,15 +46,15 @@ PairReader uses a **three-tier agent hierarchy** with LangGraph:
    - Routes user queries to specialized sub-agents
    - Graph: `knowledge_base_handler` → `qa_discovery_router` → sub-agents
 
-2. **QAAgent** (Sub-agent) - Answers specific questions
+2. **QAAgent** (Sub-agent) - **DEFAULT agent** for most queries
    - Graph: `query_optimizer` → `human_in_the_loop_approver` → `info_retriever` → `info_summarizer`
-   - Used when user has a specific question about the documents
+   - Handles all regular questions and information requests
    - Optional query decomposition for complex questions
 
-3. **DiscoveryAgent** (Sub-agent) - Provides document overview and exploration
+3. **DiscoveryAgent** (Sub-agent) - Used only for explicit exploration
    - Graph: `map_summarizer` → `reduce_summarizer`
    - Uses map-reduce pattern to cluster and summarize documents
-   - Helps users discover content when they don't know what to look for
+   - Only triggered when user explicitly asks for overview/exploration/themes/key ideas
 
 ### Agent Routing with Command Primitive
 
@@ -64,15 +64,17 @@ The `QADiscoveryRouter` uses LangGraph's **Command primitive** for dynamic routi
 - Tool execution returns a `Command(goto="agent_name", update={...})` to navigate the graph
 - This enables intelligent handoff between specialized agents
 
-**When QAAgent is triggered**:
-- User asks specific questions: "What does chapter 3 say about X?", "How many Y are mentioned?"
-- User knows what they're looking for and wants targeted answers
-- Workflow emphasizes precise retrieval and focused summarization
+**QAAgent (DEFAULT)** - Used for most queries:
+- User asks questions about content: "What does this say about X?", "Explain Y", "How many Z are mentioned?"
+- User seeks specific information from the documents
+- Workflow emphasizes precise retrieval and focused answers
+- **This is the default agent** - used unless user explicitly requests exploration
 
-**When DiscoveryAgent is triggered**:
-- User asks for overview: "What is this document about?", "Summarize the main themes"
-- User wants to explore content without specific questions
-- Workflow emphasizes clustering similar content and providing broad insights
+**DiscoveryAgent** - Used only for explicit exploration requests:
+- User explicitly asks for: "overview", "explore", "discover", "main themes", "main ideas", "key ideas", "overall summary"
+- User wants high-level exploration without specific questions
+- Workflow uses map-reduce clustering for comprehensive insights
+- **Only triggered by explicit exploration language** - not used for regular questions
 
 ### Core Components
 
@@ -265,3 +267,4 @@ class NodeName(ParamsMixin):
 - Move authentication to database with hashed passwords
 - Explore OAuth and header-based authentication
 - **DiscoveryAgent**: Improve sampling-clustering algorithm to ensure entire knowledge base is covered (currently samples may not cover all documents)
+- **Context Management**: Debug and optimize `state["messages"]` to ensure LLM gets sufficient context during multi-turn conversations while trimming when necessary to avoid token window overflow. Find the trade-off between context retention and token efficiency.
