@@ -1,7 +1,7 @@
 from pairreader.schemas import PairReaderState
 from pairreader.vectorestore import VectorStore
 from pairreader.docparser import DocParser
-from pairreader.utils import logging_verbosity, langgraph_stream_verbosity, ParamsMixin, UserIO
+from pairreader.utils import Verboser, ParamsMixin, UserIO
 from langchain.chat_models import init_chat_model
 from langchain_core.messages import AIMessage, SystemMessage, HumanMessage, ToolMessage
 from langchain_core.tools import tool, InjectedToolCallId, InjectedToolArg
@@ -45,8 +45,7 @@ class MapSummarizer(ParamsMixin):
         response: AIMessage = await self.llm.ainvoke(messages)
         return [msg, response]
 
-    @logging_verbosity
-    @langgraph_stream_verbosity
+    @Verboser(verbosity_level=2)
     async def __call__(self, state: PairReaderState) -> Dict:
         sampled_ids = self.vectorstore.get_sample(
             n_samples=self.n_sample,
@@ -88,8 +87,7 @@ class ReduceSummarizer(UserIO, ParamsMixin):
             .with_fallbacks([init_chat_model(self.fallback_llm_name)])
         )
 
-    @logging_verbosity
-    @langgraph_stream_verbosity
+    @Verboser(verbosity_level=2)
     async def __call__(self, state: PairReaderState) -> Dict:
         "Summarize the map summaries"
         summaries_text = '\n'.join((f"map-summary {i+1}:\n{s} " for i, s in enumerate(state["cluster_summaries"])))

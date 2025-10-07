@@ -1,7 +1,7 @@
 from pairreader.schemas import PairReaderState
 from pairreader.vectorestore import VectorStore
 from pairreader.docparser import DocParser
-from pairreader.utils import logging_verbosity, langgraph_stream_verbosity, ParamsMixin, UserIO
+from pairreader.utils import Verboser, ParamsMixin, UserIO
 from langchain.chat_models import init_chat_model
 from langchain_core.messages import AIMessage, SystemMessage, HumanMessage
 from langchain_core.tools import tool
@@ -20,8 +20,7 @@ class KnowledgeBaseHandler(UserIO, ParamsMixin):
         self.docparser = docparser
         self.vectorstore = vectorstore
 
-    @logging_verbosity
-    @langgraph_stream_verbosity
+    @Verboser(verbosity_level=2)
     # @cl.step(type="ChainlitCommandHandler", name="ChainlitCommandHandler")
     async def __call__(self, state: PairReaderState, *args, **kwds):
         """Handle Chainlit commands and file uploads."""
@@ -82,8 +81,7 @@ class QADiscoveryRouter(ParamsMixin):
             ])
         )
     
-    @logging_verbosity
-    @langgraph_stream_verbosity
+    @Verboser(verbosity_level=2)
     async def __call__(self, state: PairReaderState) -> Command:
         route_prompt = """
         You are a pair-reader agent that helps users chat with information from a knowledge base containing their uploaded documents.
