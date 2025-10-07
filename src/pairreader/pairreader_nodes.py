@@ -27,6 +27,7 @@ class KnowledgeBaseHandler(UserIO, ParamsMixin):
         # if the user sends a command
         if (user_command := state.get("user_command")):
             if user_command == "Create":
+                await self.send("Flushing knowledge base...")
                 self.vectorstore.flush()
             files = await self.ask(
                 type="file",
@@ -40,15 +41,18 @@ class KnowledgeBaseHandler(UserIO, ParamsMixin):
                 )
                 interrupt()
             else:
+                await self.send(f"Processing {len(files)} file(s)...")
                 for f in files:
+                    await self.send(f"Parsing {f.name}...")
                     self.docparser.parse(f.path)
                     chunks = self.docparser.get_chunks()
                     metadatas = [{"fname": f.name}] * len(chunks)
+                    await self.send(f"Ingesting {len(chunks)} chunks from {f.name}...")
                     self.vectorstore.ingest_chunks(chunks, metadatas)
                 # files uploaded and parsed, ask for a user query
                 len_docs = self.vectorstore.get_len_docs()
                 await self.send(
-                    f"Files uploaded: {[f.name for f in files]}. Knowledge base now contains {len_docs} document chunks. What do you want to know?"
+                    f"✓ Files uploaded: {[f.name for f in files]}. Knowledge base now contains {len_docs} document chunks. What do you want to know?"
                 )
                 interrupt()
         # the user doesn't send a command, rather he should've sent a message, don't update the state

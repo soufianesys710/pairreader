@@ -115,7 +115,7 @@ class HumanInTheLoopApprover(UserIO, ParamsMixin):
         return state_update
 
 
-class InfoRetriever(ParamsMixin):
+class InfoRetriever(UserIO, ParamsMixin):
     """
     Retrieves relevant information from the vector store based on optimized queries.
 
@@ -131,7 +131,9 @@ class InfoRetriever(ParamsMixin):
     async def __call__(self, state: PairReaderState, *args, **kwds) -> Dict[str, Any]:
         """Retrieve documents from vector store."""
         subqueries = [state.get("user_query")] + state.get("subqueries")
+        await self.send(f"Querying knowledge base with {len(subqueries)} optimized queries...")
         results = self.vectorstore.query(query_texts=subqueries, n_documents=self.n_documents)
+        await self.send(f"✓ Retrieved {len(results['documents'][0])} relevant document chunks.")
         state_update = {
             "retrieved_documents": results["documents"][0],
             "retrieved_metadatas": results["metadatas"][0]
@@ -157,6 +159,7 @@ class InfoSummarizer(UserIO, ParamsMixin):
     # @cl.step(type="InfoSummarizer", name="InfoSummarizer")
     async def __call__(self, state: PairReaderState, *args, **kwds) -> Dict[str, Any]:
         """Summarize retrieved documents for user query."""
+        await self.send(f"Synthesizing answer from {len(state['retrieved_documents'])} retrieved documents...")
         state["messages"].extend([
             HumanMessage(
                 "You are a helpful summarization assistant. Create a comprehensive summary "
