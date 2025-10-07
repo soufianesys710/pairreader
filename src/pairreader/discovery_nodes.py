@@ -1,14 +1,13 @@
 from pairreader.schemas import PairReaderState
 from pairreader.vectorestore import VectorStore
 from pairreader.docparser import DocParser
-from pairreader.utils import logging_verbosity, langgraph_stream_verbosity, ParamsMixin
+from pairreader.utils import logging_verbosity, langgraph_stream_verbosity, ParamsMixin, UserIO
 from langchain.chat_models import init_chat_model
 from langchain_core.messages import AIMessage, SystemMessage, HumanMessage, ToolMessage
 from langchain_core.tools import tool, InjectedToolCallId, InjectedToolArg
 from langgraph.prebuilt import InjectedState
 from langgraph.types import interrupt, Command
 from typing import List, Optional, Dict, Any, Annotated
-import chainlit as cl
 import asyncio
 
 class MapSummarizer(ParamsMixin):
@@ -74,7 +73,7 @@ class MapSummarizer(ParamsMixin):
         return state_update
 
 
-class ReduceSummarizer(ParamsMixin):
+class ReduceSummarizer(UserIO, ParamsMixin):
     def __init__(self,
         llm_name: str = "anthropic:claude-3-5-haiku-latest",
         fallback_llm_name: str = "anthropic:claude-3-7-sonnet-latest"
@@ -101,5 +100,5 @@ class ReduceSummarizer(ParamsMixin):
             "messages": [msg, response],
             "summary_of_summaries": response.content
         }
-        await cl.Message(f"{response.content}").send()
+        await self.send(response.content)
         return state_update

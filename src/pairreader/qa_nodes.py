@@ -1,15 +1,14 @@
 from pairreader.schemas import PairReaderState, HITLDecision
 from pairreader.vectorestore import VectorStore
 from pairreader.docparser import DocParser
-from pairreader.utils import logging_verbosity, langgraph_stream_verbosity, ParamsMixin
+from pairreader.utils import logging_verbosity, langgraph_stream_verbosity, ParamsMixin, UserIO
 from langchain.chat_models import init_chat_model
 from langchain_core.messages import AIMessage, SystemMessage, HumanMessage
 from langgraph.types import interrupt
 from typing import List, Optional, Dict, Any
-import chainlit as cl
 
 
-class QueryOptimizer(ParamsMixin):
+class QueryOptimizer(UserIO, ParamsMixin):
     """
     Optimizes user queries for vector store retrieval.
 
@@ -54,12 +53,8 @@ class QueryOptimizer(ParamsMixin):
                 f"User Query: {state['user_query']}"
             )
             messages = list(state["messages"]) + [msg]
-            cl_msg = cl.Message(content="")
-            async for chunk in self.llm.astream(messages):
-                if chunk.content:
-                    await cl_msg.stream_token(chunk.content)
-            await cl_msg.update()
-            response = AIMessage(content=cl_msg.content)
+            content = await self.stream(self.llm, messages)
+            response = AIMessage(content=content)
             state_update = {
                 "messages": [msg, response],
                 "subqueries": [s.strip() for s in response.content.split("\n") if s.strip()]
@@ -72,7 +67,7 @@ class QueryOptimizer(ParamsMixin):
         return state_update
     
 
-class HumanInTheLoopApprover(ParamsMixin):
+class HumanInTheLoopApprover(UserIO, ParamsMixin):
     """
     Allows the user to revise LLM-generated subqueries before retrieval.
 
@@ -105,17 +100,18 @@ class HumanInTheLoopApprover(ParamsMixin):
     async def __call__(self, state: PairReaderState, *args, **kwds) -> Dict[str, Any]:
         """Request user revision of LLM subqueries."""
         ask_feedback_prompt = f"Please revise the LLM generated subqueries, please state explicitly if approve or disapprove these results!"
-        user_feedback = await cl.AskUserMessage(
-            content=ask_feedback_prompt,
+        user_feedback = await self.ask(
+            type="text",
+            message=ask_feedback_prompt,
             timeout=90
-        ).send()
+        )
         # if the user doesn't answer at timeout
-        if user_feedback is None:
-            await cl.Message("You haven't revised the LLM generated subqueries in the following 90s, we're using them as they are!").send()
+        if not user_feedback:
+            await self.send("You haven't revised the LLM generated subqueries in the following 90s, we're using them as they are!")
             state_update = {"human_in_the_loop_decision": None}
         else:
             state["messages"].append(AIMessage(content=ask_feedback_prompt))
-            state["messages"].append(HumanMessage(user_feedback["output"]))
+            state["messages"].append(HumanMessage(user_feedback))
             decision: HITLDecision = self.llm.invoke(state["messages"])
             state_update = {"human_in_the_loop_decision": decision}
         return state_update
@@ -146,7 +142,7 @@ class InfoRetriever(ParamsMixin):
         return state_update
 
 
-class InfoSummarizer(ParamsMixin):
+class InfoSummarizer(UserIO, ParamsMixin):
     """
     Summarizes retrieved information based on the user's original query.
 
@@ -175,12 +171,8 @@ class InfoSummarizer(ParamsMixin):
             HumanMessage("Retrieved Information:"),
             HumanMessage("\n\n".join(state["retrieved_documents"]))
         ])
-        msg = cl.Message(content="")
-        async for chunk in self.llm.astream(state["messages"]):
-            if chunk.content:
-                await msg.stream_token(chunk.content)
-        await msg.update()
-        response = AIMessage(content=msg.content)
+        content = await self.stream(self.llm, state["messages"])
+        response = AIMessage(content=content)
         state_update = {"messages": [response], "summary": response.content}
         return state_update
         
