@@ -39,22 +39,19 @@ class MapSummarizer(ParamsMixin):
             .with_fallbacks([init_chat_model(self.fallback_llm_name)])
         )
     
-    async def _summarize(self, cluster) -> AIMessage:
+    async def _summarize(self, cluster, state) -> AIMessage:
         cluster_docs = '\n'.join([f"doc {i+1}:\n{doc[1]} " for i, doc in enumerate(cluster)])
-        msgs = [
-            HumanMessage(self.summarization_prompt),
-            HumanMessage(cluster_docs)
-        ]
-        response: AIMessage = await self.llm.ainvoke(msgs)
-        msgs.append(response)
-        return msgs
+        msg = HumanMessage(f"{self.summarization_prompt}\n\n{cluster_docs}")
+        messages = list(state["messages"]) + [msg]
+        response: AIMessage = await self.llm.ainvoke(messages)
+        return [msg, response]
 
     @logging_verbosity
     @langgraph_stream_verbosity
     async def __call__(self, state: PairReaderState) -> Dict:
         sampled_ids = self.vectorstore.get_sample(
-            n_samples=self.n_sample, 
-            p_sample=self.p_sample
+            n_samples=self.n_sample,
+            p_samples=self.p_sample
         )
         clusters = await self.vectorstore.get_clusters(
             sampled_ids, 
@@ -63,7 +60,7 @@ class MapSummarizer(ParamsMixin):
             max_cluster_size=self.max_cluster_size
         )
         # parallelized summarization using llm
-        tasks = [self._summarize(cluster) for cluster in clusters]
+        tasks = [self._summarize(cluster, state) for cluster in clusters]
         msg_summaries = await asyncio.gather(*tasks)
 
         # state update
@@ -96,18 +93,13 @@ class ReduceSummarizer(ParamsMixin):
     @langgraph_stream_verbosity
     async def __call__(self, state: PairReaderState) -> Dict:
         "Summarize the map summaries"
-        msgs = [
-            HumanMessage("Summarize the following sub-summaries resulted following the map-reduce summarisation pattern, in a concise and informative manner."),
-            HumanMessage('\n'.join((f"map-summary {i+1}:\n{s} " for i, s in enumerate(state["cluster_summaries"]))))
-        ]
-        response: AIMessage = await self.llm.ainvoke(msgs)
-        msgs.append(response)
+        summaries_text = '\n'.join((f"map-summary {i+1}:\n{s} " for i, s in enumerate(state["cluster_summaries"])))
+        msg = HumanMessage(f"Summarize the following sub-summaries resulted following the map-reduce summarisation pattern, in a concise and informative manner.\n\n{summaries_text}")
+        messages = list(state["messages"]) + [msg]
+        response: AIMessage = await self.llm.ainvoke(messages)
         state_update = {
-            "messages": msgs,
+            "messages": [msg, response],
             "summary_of_summaries": response.content
         }
-        await cl.Message(
-            "Summarized the map summaries:\n"
-            f"{response.content}"
-        ).send()
+        await cl.Message(f"{response.content}").send()
         return state_update

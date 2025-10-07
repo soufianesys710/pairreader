@@ -45,26 +45,23 @@ class QueryOptimizer(ParamsMixin):
     async def __call__(self, state: PairReaderState, *args, **kwds) -> Dict[str, List[str]]:
         """Optimize user query for retrieval."""
         if self.query_decomposition:
-            # Only add SystemMessage if this is the first run (messages list is empty)
-            if not state["messages"]:
-                state["messages"].append(
-                    SystemMessage(
-                        "You are a query retrieval optimizer for vector store semantic search. "
-                        "Decompose the user's query into simpler, smaller sub-queries better suited for vector store search. "
-                        "Decide yourself how many sub-queries are optimal for retrieval. "
-                        "Each sub-query should be on a new line for correct parsing using split('\\n'). "
-                        "User Query:"
-                    )
-                )
-                state["messages"].append(HumanMessage(state["user_query"]))
-            msg = cl.Message(content="")
-            async for chunk in self.llm.astream(state["messages"]):
+            # Build message with user query as HumanMessage for decomposition
+            msg = HumanMessage(
+                "You are a query retrieval optimizer for vector store semantic search. "
+                "Decompose the following query into simpler, smaller sub-queries better suited for vector store search. "
+                "Decide yourself how many sub-queries are optimal for retrieval. "
+                "Each sub-query should be on a new line for correct parsing using split('\\n'). "
+                f"User Query: {state['user_query']}"
+            )
+            messages = list(state["messages"]) + [msg]
+            cl_msg = cl.Message(content="")
+            async for chunk in self.llm.astream(messages):
                 if chunk.content:
-                    await msg.stream_token(chunk.content)
-            await msg.update()
-            response = AIMessage(content=msg.content)
+                    await cl_msg.stream_token(chunk.content)
+            await cl_msg.update()
+            response = AIMessage(content=cl_msg.content)
             state_update = {
-                "messages": [response],
+                "messages": [msg, response],
                 "subqueries": [s.strip() for s in response.content.split("\n") if s.strip()]
             }
         else:
