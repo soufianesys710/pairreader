@@ -1,7 +1,7 @@
 from pairreader.schemas import PairReaderState, HITLDecision
 from pairreader.vectorestore import VectorStore
 from pairreader.docparser import DocParser
-from pairreader.utils import logging_verbosity, langgraph_stream_verbosity, ParamsMixin, UserIO
+from pairreader.utils import Verboser, ParamsMixin, UserIO
 from langchain.chat_models import init_chat_model
 from langchain_core.messages import AIMessage, SystemMessage, HumanMessage
 from langgraph.types import interrupt
@@ -38,8 +38,7 @@ class QueryOptimizer(UserIO, ParamsMixin):
             .with_fallbacks([init_chat_model(self.fallback_llm_name)])
         )
 
-    @logging_verbosity
-    @langgraph_stream_verbosity
+    @Verboser(verbosity_level=2)
     # @cl.step(type="QueryOptimizer", name="QueryOptimizer")
     async def __call__(self, state: PairReaderState, *args, **kwds) -> Dict[str, List[str]]:
         """Optimize user query for retrieval."""
@@ -94,8 +93,7 @@ class HumanInTheLoopApprover(UserIO, ParamsMixin):
         )
 
 
-    @logging_verbosity
-    @langgraph_stream_verbosity
+    @Verboser(verbosity_level=2)
     # @cl.step(type="ChainlitHumanReviser", name="ChainlitHumanReviser")
     async def __call__(self, state: PairReaderState, *args, **kwds) -> Dict[str, Any]:
         """Request user revision of LLM subqueries."""
@@ -128,8 +126,7 @@ class InfoRetriever(ParamsMixin):
         self.vectorstore = vectorstore
         self.n_documents = n_documents
 
-    @logging_verbosity
-    @langgraph_stream_verbosity
+    @Verboser(verbosity_level=2)
     # @cl.step(type="InfoRetriever", name="InfoRetriever")
     async def __call__(self, state: PairReaderState, *args, **kwds) -> Dict[str, Any]:
         """Retrieve documents from vector store."""
@@ -156,8 +153,7 @@ class InfoSummarizer(UserIO, ParamsMixin):
     def llm(self):
         return init_chat_model(self.llm_name)
 
-    @logging_verbosity
-    @langgraph_stream_verbosity
+    @Verboser(verbosity_level=2)
     # @cl.step(type="InfoSummarizer", name="InfoSummarizer")
     async def __call__(self, state: PairReaderState, *args, **kwds) -> Dict[str, Any]:
         """Summarize retrieved documents for user query."""
