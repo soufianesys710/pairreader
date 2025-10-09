@@ -39,7 +39,15 @@ uv run chainlit create-secret
 ```bash
 ANTHROPIC_API_KEY=your_api_key_here
 CHAINLIT_AUTH_SECRET=your_secret_from_step_1
+
+# LangSmith (Activated by default for LLMOps - get API key from https://smith.langchain.com/)
+LANGSMITH_TRACING=true
+LANGSMITH_ENDPOINT=https://api.smith.langchain.com
+LANGSMITH_API_KEY=your_langsmith_api_key_here
+LANGSMITH_PROJECT=pairreader
 ```
+
+**LangSmith Integration**: PairReader uses LangSmith for automatic tracing, debugging, and LLMOps monitoring. When enabled, all agent workflows, LLM calls, and multi-agent interactions are automatically traced without any code changes, providing full visibility into your application's behavior.
 
 ### Running the Application
 
@@ -74,6 +82,15 @@ Then open your browser to `http://localhost:8000`
 - **Smart Chunking**: Uses Docling's HybridChunker for intelligent document segmentation
 - **Contextual Embedding**: Chunks are contextualized for better retrieval
 - **Persistent Storage**: Your knowledge base is saved in ChromaDB and persists between sessions
+
+### LangSmith Tracing
+PairReader includes built-in LangSmith integration for LLMOps:
+- **Automatic Tracing**: All LangGraph workflows are traced when `LANGSMITH_TRACING=true`
+- **Zero Configuration**: No code changes needed - just set your API key
+- **Full Visibility**: Monitor agent orchestration, LLM calls, token usage, and performance
+- **Debug Tools**: Detailed traces for troubleshooting multi-agent interactions
+
+View your traces at [smith.langchain.com](https://smith.langchain.com/) under the `pairreader` project.
 
 ### Configurable Settings
 Adjust the following in the UI settings panel:
@@ -128,6 +145,7 @@ The system automatically routes your query to the appropriate agent:
 - **LLM**: Anthropic's Claude (Haiku/Sonnet) via LangChain
 - **Vector Store**: ChromaDB for semantic search and clustering
 - **Document Parser**: Docling for robust PDF and text processing
+- **LLMOps**: LangSmith for automatic tracing, debugging, and monitoring (activated by default)
 
 ## 💡 Tips for Best Results
 

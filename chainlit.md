@@ -2,6 +2,8 @@
 
 PairReader lets you upload your documents and ask questions about them. It's like having a study partner who never forgets anything!
 
+**📊 Performance Monitoring:** Your interactions with PairReader are automatically tracked to help us improve the app's performance and quality. This helps us understand how the system responds to different questions and optimize the experience for everyone.
+
 ## 🎯 How to Use
 
 **Three usage modes:**

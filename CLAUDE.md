@@ -28,7 +28,15 @@ Create a `.env` file in the project root with the following variables:
 ```bash
 ANTHROPIC_API_KEY=your_api_key_here
 CHAINLIT_AUTH_SECRET=your_secret_here  # Generate with: chainlit create-secret
+
+# LangSmith (Activated by default for LLMOps)
+LANGSMITH_TRACING=true
+LANGSMITH_ENDPOINT=https://api.smith.langchain.com
+LANGSMITH_API_KEY=your_langsmith_api_key_here
+LANGSMITH_PROJECT=pairreader
 ```
+
+**LangSmith Integration**: The application uses LangSmith for tracing, debugging, and LLMOps monitoring. When `LANGSMITH_TRACING=true`, all LangGraph workflows are automatically traced without requiring code changes. This provides visibility into agent execution, LLM calls, and multi-agent interactions.
 
 ### Development Environment
 - Python 3.12+ required
@@ -204,6 +212,13 @@ Commands are triggered via Chainlit commands `/Create` or `/Update`, or via star
 - When timeout occurs, user can continue with existing knowledge base
 
 ## Important Implementation Details
+
+### LangSmith Tracing and LLMOps
+- **Automatic Tracing**: LangSmith is activated by default when `LANGSMITH_TRACING=true` in `.env`
+- **Zero-Code Integration**: All LangGraph workflows, LLM calls, and agent interactions are automatically traced
+- **Debugging**: Provides detailed visibility into multi-agent orchestration, state transitions, and tool calls
+- **Monitoring**: Tracks performance metrics, token usage, and latency across all three agents
+- **Project**: Traces are organized under the `pairreader` project in LangSmith dashboard
 
 ### LLM Configuration
 - Default LLM: `anthropic:claude-3-5-haiku-latest`
