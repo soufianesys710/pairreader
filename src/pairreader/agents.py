@@ -2,7 +2,7 @@ from pairreader.docparser import DocParser
 from pairreader.vectorestore import VectorStore
 from pairreader.schemas import PairReaderState
 from pairreader.qa_nodes import QueryOptimizer, HumanInTheLoopApprover, InfoRetriever, InfoSummarizer
-from pairreader.discovery_nodes import MapSummarizer, ReduceSummarizer
+from pairreader.discovery_nodes import ClusterRetriever, MapSummarizer, ReduceSummarizer
 from pairreader.pairreader_nodes import KnowledgeBaseHandler, QADiscoveryRouter
 from pairreader.utils import BaseAgent
 from langgraph.graph import START, END
@@ -37,12 +37,14 @@ class DiscoveryAgent(BaseAgent):
         super().__init__(
             PairReaderState,
             [
-                ("map_summarizer", MapSummarizer(vectorstore=self.vectorstore)),
+                ("cluster_retriever", ClusterRetriever(vectorstore=self.vectorstore)),
+                ("map_summarizer", MapSummarizer()),
                 ("reduce_summarizer", ReduceSummarizer()),
             ]
         )
         self.checkpointer = InMemorySaver()
-        self.builder.add_edge(START, "map_summarizer")
+        self.builder.add_edge(START, "cluster_retriever")
+        self.builder.add_edge("cluster_retriever", "map_summarizer")
         self.builder.add_edge("map_summarizer", "reduce_summarizer")
         self.builder.add_edge("reduce_summarizer", END)
         self.workflow = self.builder.compile(checkpointer=self.checkpointer)

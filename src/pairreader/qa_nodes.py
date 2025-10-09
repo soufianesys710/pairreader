@@ -2,6 +2,7 @@ from pairreader.schemas import PairReaderState, HITLDecision
 from pairreader.vectorestore import VectorStore
 from pairreader.docparser import DocParser
 from pairreader.utils import Verboser, ParamsMixin, UserIO
+from pairreader.prompts_msgs import QA_PROMPTS, QA_MSGS
 from langchain.chat_models import init_chat_model
 from langchain_core.messages import AIMessage, SystemMessage, HumanMessage
 from langgraph.types import interrupt
@@ -39,17 +40,11 @@ class QueryOptimizer(UserIO, ParamsMixin):
         )
 
     @Verboser(verbosity_level=2)
-    # @cl.step(type="QueryOptimizer", name="QueryOptimizer")
     async def __call__(self, state: PairReaderState, *args, **kwds) -> Dict[str, List[str]]:
         """Optimize user query for retrieval."""
         if self.query_decomposition:
-            # Build message with user query as HumanMessage for decomposition
             msg = HumanMessage(
-                "You are a query retrieval optimizer for vector store semantic search. "
-                "Decompose the following query into simpler, smaller sub-queries better suited for vector store search. "
-                "Decide yourself how many sub-queries are optimal for retrieval. "
-                "Each sub-query should be on a new line for correct parsing using split('\\n'). "
-                f"User Query: {state['user_query']}"
+                QA_PROMPTS["query_decompose"].format(user_query=state['user_query'])
             )
             messages = list(state["messages"]) + [msg]
             content = await self.stream(self.llm, messages)
@@ -92,23 +87,20 @@ class HumanInTheLoopApprover(UserIO, ParamsMixin):
             ])
         )
 
-
     @Verboser(verbosity_level=2)
-    # @cl.step(type="ChainlitHumanReviser", name="ChainlitHumanReviser")
     async def __call__(self, state: PairReaderState, *args, **kwds) -> Dict[str, Any]:
         """Request user revision of LLM subqueries."""
-        ask_feedback_prompt = f"Please revise the LLM generated subqueries, please state explicitly if approve or disapprove these results!"
         user_feedback = await self.ask(
             type="text",
-            message=ask_feedback_prompt,
+            message=QA_MSGS["hitl_ask_feedback"],
             timeout=90
         )
         # if the user doesn't answer at timeout
         if not user_feedback:
-            await self.send("You haven't revised the LLM generated subqueries in the following 90s, we're using them as they are!")
+            await self.send(QA_MSGS["hitl_timeout"])
             state_update = {"human_in_the_loop_decision": None}
         else:
-            state["messages"].append(AIMessage(content=ask_feedback_prompt))
+            state["messages"].append(AIMessage(content=QA_MSGS["hitl_ask_feedback"]))
             state["messages"].append(HumanMessage(user_feedback))
             decision: HITLDecision = self.llm.invoke(state["messages"])
             state_update = {"human_in_the_loop_decision": decision}
@@ -127,13 +119,12 @@ class InfoRetriever(UserIO, ParamsMixin):
         self.n_documents = n_documents
 
     @Verboser(verbosity_level=2)
-    # @cl.step(type="InfoRetriever", name="InfoRetriever")
     async def __call__(self, state: PairReaderState, *args, **kwds) -> Dict[str, Any]:
         """Retrieve documents from vector store."""
         subqueries = [state.get("user_query")] + state.get("subqueries")
-        await self.send(f"Querying knowledge base with {len(subqueries)} optimized queries...")
+        await self.send(QA_MSGS["retriever_querying"].format(n_queries=len(subqueries)))
         results = self.vectorstore.query(query_texts=subqueries, n_documents=self.n_documents)
-        await self.send(f"✓ Retrieved {len(results['documents'][0])} relevant document chunks.")
+        await self.send(QA_MSGS["retriever_retrieved"].format(n_docs=len(results['documents'][0])))
         state_update = {
             "retrieved_documents": results["documents"][0],
             "retrieved_metadatas": results["metadatas"][0]
@@ -150,26 +141,21 @@ class InfoSummarizer(UserIO, ParamsMixin):
     """
     def __init__(self, llm_name: str = "anthropic:claude-3-5-haiku-latest"):
         self.llm_name = llm_name
-    
+
     @property
     def llm(self):
         return init_chat_model(self.llm_name)
 
     @Verboser(verbosity_level=2)
-    # @cl.step(type="InfoSummarizer", name="InfoSummarizer")
     async def __call__(self, state: PairReaderState, *args, **kwds) -> Dict[str, Any]:
         """Summarize retrieved documents for user query."""
-        await self.send(f"Synthesizing answer from {len(state['retrieved_documents'])} retrieved documents...")
-        state["messages"].extend([
-            HumanMessage(
-                "You are a helpful summarization assistant. Create a comprehensive summary "
-                "of the retrieved information that directly addresses the user's query. "
-                "Focus on relevant information and maintain accuracy."
-            ),
-            HumanMessage(f"User Query: {state['user_query']}"),
-            HumanMessage("Retrieved Information:"),
-            HumanMessage("\n\n".join(state["retrieved_documents"]))
-        ])
+        await self.send(QA_MSGS["summarizer_synthesizing"].format(n_docs=len(state['retrieved_documents'])))
+        retrieved_docs = "\n\n".join(state["retrieved_documents"])
+        prompt = QA_PROMPTS["info_summarizer"].format(
+            user_query=state['user_query'],
+            retrieved_docs=retrieved_docs
+        )
+        state["messages"].append(HumanMessage(prompt))
         content = await self.stream(self.llm, state["messages"])
         response = AIMessage(content=content)
         state_update = {"messages": [response], "summary": response.content}
