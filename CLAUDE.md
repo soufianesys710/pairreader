@@ -52,7 +52,7 @@ PairReader uses a **three-tier agent hierarchy** with LangGraph:
    - Optional query decomposition for complex questions
 
 3. **DiscoveryAgent** (Sub-agent) - Used only for explicit exploration
-   - Graph: `map_summarizer` → `reduce_summarizer`
+   - Graph: `cluster_retriever` → `map_summarizer` → `reduce_summarizer`
    - Uses map-reduce pattern to cluster and summarize documents
    - Only triggered when user explicitly asks for overview/exploration/themes/key ideas
 
@@ -101,7 +101,7 @@ The `QADiscoveryRouter` uses LangGraph's **Command primitive** for dynamic routi
   - `user_query`: Original user question
   - `user_command`: Command type (Create/Update/None)
   - QA-specific: `subqueries`, `human_in_the_loop_decision`, `retrieved_documents`, `retrieved_metadatas`, `summary`
-  - Discovery-specific: `cluster_summaries`, `summary_of_summaries`
+  - Discovery-specific: `clusters`, `cluster_summaries`, `summary_of_summaries`
 - `HITLDecision` is a Pydantic BaseModel for structured routing decisions
 
 **Node Architecture**
@@ -118,17 +118,35 @@ Nodes are organized into three files:
    - `InfoSummarizer`: Generates final response using LLM
 
 3. **`discovery_nodes.py`** - Discovery Agent nodes
-   - `MapSummarizer`: Samples documents, clusters them, and summarizes each cluster in parallel using `asyncio.gather()`
-   - `ReduceSummarizer`: Summarizes the cluster summaries into a final overview
+   - `ClusterRetriever`: Samples documents from vectorstore and clusters them
+   - `MapSummarizer`: Summarizes each cluster in parallel using `asyncio.gather()`
+   - `ReduceSummarizer`: Combines cluster summaries into a final overview
 
 **Common Node Patterns**:
 - All nodes inherit from `ParamsMixin` to support dynamic parameter updates via `set_params(**kwargs)`
-- All node `__call__` methods are decorated with `@logging_verbosity` and `@langgraph_stream_verbosity`
+- All node `__call__` methods are decorated with `@Verboser()` decorator
+- All nodes use centralized prompts/messages from `prompts_msgs.py`
 
-**Utility Decorators** (`src/pairreader/utils.py`)
-- `@logging_verbosity`: Logs start/finish of node execution (optional debug param)
-- `@langgraph_stream_verbosity`: Writes node status to LangGraph stream using `get_stream_writer()`
+**Utility Classes and Decorators** (`src/pairreader/utils.py`)
+- `@Verboser`: Combined decorator for logging and streaming verbosity (supports levels 0-3)
+  - Level 0: No verbosity
+  - Level 1: LangGraph streaming only
+  - Level 2: LangGraph streaming + logging (default)
+  - Level 3: LangGraph streaming + logging with debug
 - `ParamsMixin`: Base class providing `set_params()` and `get_params()` for dynamic configuration
+- `UserIO`: Handles user input/output operations (ask, send, stream methods)
+- `BaseAgent`: Base class for all agents with common initialization and workflow patterns
+
+**Prompts and Messages** (`src/pairreader/prompts_msgs.py`)
+Centralized repository for all LLM prompts and user messages:
+- `DISCOVERY_PROMPTS`: Templates sent to LLMs for Discovery Agent processing
+- `DISCOVERY_MSGS`: User-facing messages for Discovery Agent
+- `QA_PROMPTS`: Templates sent to LLMs for QA Agent processing
+- `QA_MSGS`: User-facing messages for QA Agent
+- `PAIRREADER_PROMPTS`: Templates sent to LLMs for routing decisions
+- `PAIRREADER_MSGS`: User-facing messages for knowledge base operations
+
+All prompts use `.format()` for variable substitution to maintain clean separation between template structure and dynamic content
 
 **Document Processing**
 - `DocParser` (`src/pairreader/docparser.py`): Uses Docling's `DocumentConverter` and `HybridChunker`
@@ -137,7 +155,7 @@ Nodes are organized into three files:
   - Default collection name: `"knowledge_base"`
   - Discovery-specific methods:
     - `get_sample()`: Random sampling of document IDs for clustering
-    - `get_clusters()`: Async parallel cluster creation using semantic similarity and HDBSCAN
+    - `get_clusters()`: Async parallel cluster creation using semantic similarity
 
 **Chainlit Integration** (`src/pairreader/__main__.py`)
 - Entry point with `main()` function for CLI command
@@ -167,7 +185,7 @@ Commands are triggered via Chainlit commands `/Create` or `/Update`, or via star
 **Discovery Agent Features**
 - **Map-Reduce Summarization**:
   - Samples documents from vector store (configurable via `n_sample` or `p_sample`)
-  - Clusters documents using semantic similarity (HDBSCAN algorithm)
+  - Clusters documents using semantic similarity
   - Summarizes each cluster in parallel (map phase)
   - Combines cluster summaries into comprehensive overview (reduce phase)
 - **Configurable Parameters** (all exposed in Chainlit settings):
@@ -222,7 +240,9 @@ Commands are triggered via Chainlit commands `/Create` or `/Update`, or via star
 ### Node Implementation Pattern
 All LangGraph nodes follow this pattern:
 ```python
-class NodeName(ParamsMixin):
+from pairreader.prompts_msgs import AGENT_PROMPTS, AGENT_MSGS
+
+class NodeName(UserIO, ParamsMixin):
     def __init__(self, param1: type = default, ...):
         self.param1 = param1
         ...
@@ -234,9 +254,15 @@ class NodeName(ParamsMixin):
             .with_fallbacks([init_chat_model(self.fallback_llm_name)])
         )
 
-    @logging_verbosity
-    @langgraph_stream_verbosity
+    @Verboser(verbosity_level=2)
     async def __call__(self, state: PairReaderState, *args, **kwds) -> Dict:
+        # Inform user first (if needed)
+        await self.send(AGENT_MSGS["operation_starting"])
+
+        # Use prompts from centralized file
+        prompt = AGENT_PROMPTS["operation_name"].format(user_input=state["field"])
+        msg = HumanMessage(content=prompt)
+
         # Node logic here
         return {"state_key": value}
 ```
@@ -246,18 +272,41 @@ class NodeName(ParamsMixin):
   - Node classes are instantiated as tuples: `("node_name", NodeInstance())`
   - When accessing nodes from `self.nodes` list, use `node[1]` to get the instance (e.g., in `set_params()`)
   - Each agent has its own `InMemorySaver` checkpointer
+- **Prompts and Messages**:
+  - All prompts/messages are centralized in `prompts_msgs.py`
+  - `*_PROMPTS` dictionaries contain templates sent to LLMs
+  - `*_MSGS` dictionaries contain user-facing messages
+  - Use `.format()` for variable substitution in templates
+  - Inform user first before long-running operations (using `MSGS`)
 - **LLM initialization**: LLM nodes use a `@property` for `llm` to ensure fresh initialization with current params
 - **State updates**: Return a dict with only the keys being updated (not the full state)
 - **Interrupts**: Use `interrupt()` from `langgraph.types` to pause workflow for user input
 - **Structured outputs**: Use Pydantic BaseModel for routing decisions (see `HITLDecision`)
 - **Command-based routing**: Router nodes return `Command(goto="target", update={...})` for dynamic navigation
-- **Parallel execution**: DiscoveryAgent uses `asyncio.gather()` to summarize clusters in parallel
+- **Parallel execution**: MapSummarizer uses `asyncio.gather()` to summarize clusters in parallel
 
 ### Error Handling
 - Use try/except with logger.error() for error handling (see `docparser.py`)
 - ChromaDB queries support `where_document` filters (contains/not_contains)
 
 ## Package Structure
+```
+pairreader/
+├── src/pairreader/
+│   ├── __main__.py           # Application entry point
+│   ├── agents.py             # Multi-agent orchestration (PairReaderAgent, QAAgent, DiscoveryAgent)
+│   ├── pairreader_nodes.py   # Supervisor nodes (KnowledgeBaseHandler, QADiscoveryRouter)
+│   ├── qa_nodes.py           # QA Agent nodes (QueryOptimizer, InfoRetriever, etc.)
+│   ├── discovery_nodes.py    # Discovery Agent nodes (ClusterRetriever, MapSummarizer, ReduceSummarizer)
+│   ├── schemas.py            # Shared state definitions
+│   ├── prompts_msgs.py       # Centralized prompts and messages (NEW)
+│   ├── vectorestore.py       # ChromaDB interface with clustering support
+│   ├── docparser.py          # Document processing
+│   └── utils.py              # Decorators, mixins, and utilities
+├── pyproject.toml            # Project configuration
+└── CLAUDE.md                 # Developer documentation
+```
+
 - Entry point: `src/pairreader/__main__.py` with `main()` function
 - Package script defined in `pyproject.toml`: `pairreader = "pairreader.__main__:main"`
 - This allows running via `uv run pairreader` or just `pairreader` after installation

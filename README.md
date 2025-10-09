@@ -109,8 +109,8 @@ PairReader uses a **three-tier LangGraph multi-agent system**:
    - Handles all regular information requests
 
 3. **DiscoveryAgent** - For explicit exploration only
-   - Document sampling and clustering using HDBSCAN
-   - Parallel map-reduce summarization
+   - Document retrieval and clustering (ClusterRetriever)
+   - Parallel map-reduce summarization (MapSummarizer → ReduceSummarizer)
    - Comprehensive content overview
    - Triggered only by explicit exploration keywords (overview, themes, discover, etc.)
 
@@ -164,11 +164,12 @@ pairreader/
 │   ├── agents.py             # Multi-agent orchestration (PairReaderAgent, QAAgent, DiscoveryAgent)
 │   ├── pairreader_nodes.py   # Supervisor nodes (KnowledgeBaseHandler, QADiscoveryRouter)
 │   ├── qa_nodes.py           # QA Agent nodes (QueryOptimizer, InfoRetriever, etc.)
-│   ├── discovery_nodes.py    # Discovery Agent nodes (MapSummarizer, ReduceSummarizer)
+│   ├── discovery_nodes.py    # Discovery Agent nodes (ClusterRetriever, MapSummarizer, ReduceSummarizer)
 │   ├── schemas.py            # Shared state definitions
+│   ├── prompts_msgs.py       # Centralized prompts and messages
 │   ├── vectorestore.py       # ChromaDB interface with clustering support
 │   ├── docparser.py          # Document processing
-│   └── utils.py              # Decorators and utilities
+│   └── utils.py              # Decorators, mixins, and utilities
 ├── pyproject.toml            # Project configuration
 └── CLAUDE.md                 # Developer documentation
 ```

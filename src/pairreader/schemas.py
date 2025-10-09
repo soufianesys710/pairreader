@@ -21,5 +21,6 @@ class PairReaderState(TypedDict):
     retrieved_metadatas: Optional[List[Dict]]
     summary: Optional[str]
     # Discovery Agent
+    clusters: Optional[List]
     cluster_summaries: Optional[List[str]]
     summary_of_summaries: Optional[str]
