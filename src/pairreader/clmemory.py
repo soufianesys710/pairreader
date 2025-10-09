@@ -370,6 +370,10 @@ class InMemoryDataLayer(BaseDataLayer):
             if self.verbosity:
                 logger.info(f"InMemoryDataLayer - Thread {thread_id} created with userId={user_id}, userIdentifier={user_identifier}")
 
+    async def close(self):
+        if self.verbosity:
+            logger.info("InMemoryDataLayer - close called")
+            
     async def build_debug_url(self) -> str:
         if self.verbosity:
             logger.info("build_debug_url called")
