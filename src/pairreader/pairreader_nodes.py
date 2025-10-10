@@ -1,15 +1,14 @@
 from pairreader.schemas import PairReaderState
 from pairreader.vectorestore import VectorStore
 from pairreader.docparser import DocParser
-from pairreader.utils import Verboser, ParamsMixin, UserIO
+from pairreader.utils import Verboser, BaseNode, LLMNode, RetrievalNode
 from pairreader.prompts_msgs import PAIRREADER_PROMPTS, PAIRREADER_MSGS
-from langchain.chat_models import init_chat_model
 from langchain_core.messages import AIMessage, SystemMessage, HumanMessage
 from langchain_core.tools import tool
 from langgraph.types import interrupt, Command
 from typing import List, Optional, Dict, Any, Annotated, Literal
 
-class KnowledgeBaseHandler(UserIO, ParamsMixin):
+class KnowledgeBaseHandler(BaseNode):
     """
     Handles knowledge base commands (Create, Update) and file upload logic.
 
@@ -62,30 +61,17 @@ class KnowledgeBaseHandler(UserIO, ParamsMixin):
             return {}
 
 
-class QADiscoveryRouter(ParamsMixin):
-    def __init__(self,
-        llm_name: str = "anthropic:claude-3-5-haiku-latest",
-        fallback_llm_name: str = "anthropic:claude-3-7-sonnet-latest"
-    ):
-        self.llm_name = llm_name
-        self.fallback_llm_name = fallback_llm_name
+class QADiscoveryRouter(LLMNode):
+    """
+    Routes user queries to appropriate agent (QA or Discovery).
 
-    @property
-    def llm(self):
-        return (
-            init_chat_model(self.llm_name)
-            .bind_tools(
-                tools=[self.qa_agent, self.discovery_agent],
-                parallel_tool_calls=False
-            )
-            .with_fallbacks([
-                init_chat_model(self.fallback_llm_name)
-                .bind_tools(
-                    tools=[self.qa_agent, self.discovery_agent],
-                    parallel_tool_calls=False
-                )
-            ])
-        )
+    - Uses LLM with tool binding to decide routing
+    - Returns Command to navigate to selected agent
+    """
+
+    def __init__(self, **kwargs):
+        """Initialize router with qa_agent and discovery_agent tools."""
+        super().__init__(tools=[self.qa_agent, self.discovery_agent], **kwargs)
 
     @Verboser(verbosity_level=2)
     async def __call__(self, state: PairReaderState) -> Command:
