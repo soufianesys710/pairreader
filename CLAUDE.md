@@ -45,6 +45,63 @@ LANGSMITH_PROJECT=pairreader
 
 ## Architecture Overview
 
+### Node Architecture Design Principles
+
+PairReader implements a **three-tier node inheritance hierarchy** for clean separation of concerns and code reusability:
+
+#### 1. BaseNode (Foundation Layer)
+Base class for all LangGraph nodes providing:
+- **User I/O operations**: `ask()`, `send()`, `stream()` methods for UI interaction
+- **Dynamic parameter management**: `set_params()` and `get_params()` for runtime configuration
+- **Standard interface**: All nodes implement `async __call__(state: Dict) -> Dict`
+
+**When to use**: Pure logic nodes that don't need LLM or vector store access
+- Example: `KnowledgeBaseHandler` (handles file uploads and commands)
+
+#### 2. LLMNode (extends BaseNode)
+Specialized for nodes using Language Models with encapsulated patterns:
+- **Primary + Fallback LLM**: Automatic failover if primary model fails
+- **Tool Binding**: Optional `.bind_tools()` for routing/function calling
+- **Structured Output**: Optional `.with_structured_output()` for Pydantic models
+- **Smart `@property llm`**: Dynamically applies all configurations when accessed
+
+**When to use**: Nodes that generate text, make decisions, or use LLM reasoning
+- Examples: `QueryOptimizer`, `InfoSummarizer`, `MapSummarizer`, `ReduceSummarizer`, `QADiscoveryRouter`, `HumanInTheLoopApprover`
+
+**Configuration flexibility**:
+```python
+# Simple LLM node (with fallback)
+class InfoSummarizer(LLMNode):
+    def __init__(self, llm_name: str = "anthropic:claude-3-5-haiku-latest", **kwargs):
+        super().__init__(llm_name=llm_name, fallback_llm_name=None, **kwargs)
+
+# With structured output
+class HumanInTheLoopApprover(LLMNode):
+    def __init__(self, **kwargs):
+        super().__init__(structured_output_schema=HITLDecision, **kwargs)
+
+# With tool binding
+class QADiscoveryRouter(LLMNode):
+    def __init__(self, **kwargs):
+        super().__init__(tools=[self.qa_agent, self.discovery_agent], **kwargs)
+```
+
+#### 3. RetrievalNode (extends BaseNode)
+Specialized for nodes interacting with vector stores:
+- **Vectorstore access**: Direct access via `self.vectorstore`
+- **Common retrieval patterns**: Query, sample, cluster, metadata operations
+- **Separation of concerns**: Retrieval logic separated from LLM logic
+
+**When to use**: Nodes that query, sample, or cluster documents
+- Examples: `InfoRetriever`, `ClusterRetriever`
+
+**Key Benefits of This Architecture**:
+1. **Code Reusability**: Common LLM and retrieval patterns extracted once
+2. **Separation of Concerns**: LLM logic, retrieval logic, and I/O cleanly separated
+3. **Flexibility**: Easy to swap LLM configurations, add tools, or change vectorstore
+4. **Consistency**: All nodes follow the same patterns and interfaces
+5. **Testability**: Each layer can be tested independently
+
 ### Multi-Agent System Architecture
 
 PairReader uses a **three-tier agent hierarchy** with LangGraph:
@@ -113,36 +170,46 @@ The `QADiscoveryRouter` uses LangGraph's **Command primitive** for dynamic routi
 - `HITLDecision` is a Pydantic BaseModel for structured routing decisions
 
 **Node Architecture**
-Nodes are organized into three files:
+Nodes are organized into three files, with each node inheriting from the appropriate base class:
 
 1. **`pairreader_nodes.py`** - Supervisor-level nodes
-   - `KnowledgeBaseHandler`: Manages file uploads and vector store initialization
-   - `QADiscoveryRouter`: Routes queries to QA or Discovery agent using Command primitive
+   - `KnowledgeBaseHandler` (BaseNode): Manages file uploads and vector store initialization
+   - `QADiscoveryRouter` (LLMNode): Routes queries to QA or Discovery agent using Command primitive with tool binding
 
 2. **`qa_nodes.py`** - QA Agent nodes
-   - `QueryOptimizer`: Decomposes queries using LLM (configurable via `query_decomposition` param). When `query_decomposition=False`, passes through original query WITHOUT calling LLM.
-   - `HumanInTheLoopApprover`: Uses `interrupt()` for user interaction, returns structured `HITLDecision`
-   - `InfoRetriever`: Queries ChromaDB with subqueries
-   - `InfoSummarizer`: Generates final response using LLM
+   - `QueryOptimizer` (LLMNode): Decomposes queries using LLM (configurable via `query_decomposition` param). When `query_decomposition=False`, passes through original query WITHOUT calling LLM.
+   - `HumanInTheLoopApprover` (LLMNode): Uses `interrupt()` for user interaction, returns structured `HITLDecision` via structured output
+   - `InfoRetriever` (RetrievalNode): Queries ChromaDB with subqueries
+   - `InfoSummarizer` (LLMNode): Generates final response using LLM (no fallback by design)
 
 3. **`discovery_nodes.py`** - Discovery Agent nodes
-   - `ClusterRetriever`: Samples documents from vectorstore and clusters them
-   - `MapSummarizer`: Summarizes each cluster in parallel using `asyncio.gather()`
-   - `ReduceSummarizer`: Combines cluster summaries into a final overview
+   - `ClusterRetriever` (RetrievalNode): Samples documents from vectorstore and clusters them
+   - `MapSummarizer` (LLMNode): Summarizes each cluster in parallel using `asyncio.gather()`
+   - `ReduceSummarizer` (LLMNode): Combines cluster summaries into a final overview
 
 **Common Node Patterns**:
-- All nodes inherit from `ParamsMixin` to support dynamic parameter updates via `set_params(**kwargs)`
+- All nodes inherit from `BaseNode`, `LLMNode`, or `RetrievalNode` depending on their function
+- All nodes support dynamic parameter updates via `set_params(**kwargs)` (inherited from BaseNode)
 - All node `__call__` methods are decorated with `@Verboser()` decorator
 - All nodes use centralized prompts/messages from `prompts_msgs.py`
+- LLM nodes use `@property llm` to ensure fresh initialization with current parameters
+- Retrieval nodes access vectorstore via `self.vectorstore`
 
 **Utility Classes and Decorators** (`src/pairreader/utils.py`)
+
+**Node Base Classes** (see "Node Architecture Design Principles" section for details):
+- `BaseNode`: Foundation class for all nodes (UserIO + parameter management + standard interface)
+- `LLMNode`: Extends BaseNode for nodes using language models (handles LLM config, fallbacks, tools, structured output)
+- `RetrievalNode`: Extends BaseNode for nodes accessing vector stores (encapsulates vectorstore patterns)
+
+**Decorators**:
 - `@Verboser`: Combined decorator for logging and streaming verbosity (supports levels 0-3)
   - Level 0: No verbosity
   - Level 1: LangGraph streaming only
   - Level 2: LangGraph streaming + logging (default)
   - Level 3: LangGraph streaming + logging with debug
-- `ParamsMixin`: Base class providing `set_params()` and `get_params()` for dynamic configuration
-- `UserIO`: Handles user input/output operations (ask, send, stream methods)
+
+**Agent Infrastructure**:
 - `BaseAgent`: Base class for all agents with common initialization and workflow patterns
 
 **Prompts and Messages** (`src/pairreader/prompts_msgs.py`)
@@ -266,53 +333,142 @@ PairReader implements production-ready LLMOps through LangSmith for full observa
 
 ## Code Style and Patterns
 
-### Node Implementation Pattern
-All LangGraph nodes follow this pattern:
+### Node Implementation Patterns
+All LangGraph nodes inherit from one of three base classes. Choose based on the node's function:
+
+#### Pattern 1: BaseNode (Pure Logic Nodes)
+For nodes that don't need LLM or vectorstore access:
 ```python
-from pairreader.prompts_msgs import AGENT_PROMPTS, AGENT_MSGS
+from pairreader.utils import BaseNode, Verboser
+from pairreader.prompts_msgs import AGENT_MSGS
 
-class NodeName(UserIO, ParamsMixin):
-    def __init__(self, param1: type = default, ...):
-        self.param1 = param1
-        ...
-
-    @property
-    def llm(self):  # If node uses LLM
-        return (
-            init_chat_model(self.llm_name)
-            .with_fallbacks([init_chat_model(self.fallback_llm_name)])
-        )
+class KnowledgeBaseHandler(BaseNode):
+    def __init__(self, docparser: DocParser, vectorstore: VectorStore):
+        self.docparser = docparser
+        self.vectorstore = vectorstore
 
     @Verboser(verbosity_level=2)
     async def __call__(self, state: PairReaderState, *args, **kwds) -> Dict:
         # Inform user first (if needed)
         await self.send(AGENT_MSGS["operation_starting"])
 
-        # Use prompts from centralized file
-        prompt = AGENT_PROMPTS["operation_name"].format(user_input=state["field"])
-        msg = HumanMessage(content=prompt)
-
-        # Node logic here
+        # Pure logic here (file handling, state management, etc.)
         return {"state_key": value}
 ```
 
+#### Pattern 2: LLMNode (Language Model Nodes)
+For nodes using LLMs with optional fallback, tools, or structured output:
+```python
+from pairreader.utils import LLMNode, Verboser
+from pairreader.prompts_msgs import AGENT_PROMPTS, AGENT_MSGS
+from langchain_core.messages import HumanMessage
+
+# Simple LLM node
+class InfoSummarizer(LLMNode):
+    def __init__(self, llm_name: str = "anthropic:claude-3-5-haiku-latest", **kwargs):
+        super().__init__(llm_name=llm_name, fallback_llm_name=None, **kwargs)
+
+    @Verboser(verbosity_level=2)
+    async def __call__(self, state: PairReaderState, *args, **kwds) -> Dict:
+        await self.send(AGENT_MSGS["operation_starting"])
+
+        prompt = AGENT_PROMPTS["operation_name"].format(user_input=state["field"])
+        msg = HumanMessage(content=prompt)
+
+        # Use self.llm (automatically configured with fallback/tools/structured output)
+        content = await self.stream(self.llm, state["messages"] + [msg])
+        return {"state_key": content}
+
+# LLM node with structured output
+class HumanInTheLoopApprover(LLMNode):
+    def __init__(self, **kwargs):
+        super().__init__(structured_output_schema=HITLDecision, **kwargs)
+
+    @Verboser(verbosity_level=2)
+    async def __call__(self, state: PairReaderState, *args, **kwds) -> Dict:
+        # self.llm automatically returns HITLDecision instance
+        decision: HITLDecision = self.llm.invoke(state["messages"])
+        return {"human_in_the_loop_decision": decision}
+
+# LLM node with tool binding
+class QADiscoveryRouter(LLMNode):
+    def __init__(self, **kwargs):
+        super().__init__(tools=[self.qa_agent, self.discovery_agent], **kwargs)
+
+    @Verboser(verbosity_level=2)
+    async def __call__(self, state: PairReaderState) -> Command:
+        # self.llm automatically bound with tools
+        response = await self.llm.ainvoke(messages)
+        tool_call = response.tool_calls[0]
+        return Command(goto=tool_call["name"], update={...})
+
+    @tool(description="...")
+    def qa_agent():
+        return "qa_agent"
+```
+
+#### Pattern 3: RetrievalNode (Vector Store Nodes)
+For nodes that query, sample, or cluster documents:
+```python
+from pairreader.utils import RetrievalNode, Verboser
+from pairreader.prompts_msgs import AGENT_MSGS
+
+class InfoRetriever(RetrievalNode):
+    def __init__(self, vectorstore: VectorStore, n_documents: int = 10, **kwargs):
+        super().__init__(vectorstore=vectorstore, **kwargs)
+        self.n_documents = n_documents
+
+    @Verboser(verbosity_level=2)
+    async def __call__(self, state: PairReaderState, *args, **kwds) -> Dict:
+        await self.send(AGENT_MSGS["retriever_querying"])
+
+        # Access vectorstore via self.vectorstore
+        results = self.vectorstore.query(
+            query_texts=state["subqueries"],
+            n_documents=self.n_documents
+        )
+
+        return {
+            "retrieved_documents": results["documents"][0],
+            "retrieved_metadatas": results["metadatas"][0]
+        }
+```
+
 ### Important Patterns
-- **Agent instantiation**: All three agents (PairReaderAgent, QAAgent, DiscoveryAgent) follow the same pattern:
+
+**Node Inheritance**:
+- **Choose the right base class**:
+  - `BaseNode` for pure logic (file handling, commands)
+  - `LLMNode` for text generation, decision-making, routing
+  - `RetrievalNode` for vectorstore queries, sampling, clustering
+- **All nodes inherit from one of these three classes** - never create nodes from scratch
+- **LLM configuration is automatic**: `LLMNode.llm` property handles fallbacks, tools, and structured output
+- **Vectorstore access is built-in**: `RetrievalNode.vectorstore` provides direct access
+
+**Agent instantiation**:
+- All three agents (PairReaderAgent, QAAgent, DiscoveryAgent) follow the same pattern:
   - Node classes are instantiated as tuples: `("node_name", NodeInstance())`
   - When accessing nodes from `self.nodes` list, use `node[1]` to get the instance (e.g., in `set_params()`)
   - Each agent has its own `InMemorySaver` checkpointer
-- **Prompts and Messages**:
-  - All prompts/messages are centralized in `prompts_msgs.py`
-  - `*_PROMPTS` dictionaries contain templates sent to LLMs
-  - `*_MSGS` dictionaries contain user-facing messages
-  - Use `.format()` for variable substitution in templates
-  - Inform user first before long-running operations (using `MSGS`)
-- **LLM initialization**: LLM nodes use a `@property` for `llm` to ensure fresh initialization with current params
+
+**Prompts and Messages**:
+- All prompts/messages are centralized in `prompts_msgs.py`
+- `*_PROMPTS` dictionaries contain templates sent to LLMs
+- `*_MSGS` dictionaries contain user-facing messages
+- Use `.format()` for variable substitution in templates
+- Inform user first before long-running operations (using `MSGS`)
+
+**LLM Patterns**:
+- **Dynamic initialization**: LLM nodes use `@property llm` to ensure fresh initialization with current params
+- **Fallback configuration**: Set `fallback_llm_name=None` to disable (e.g., InfoSummarizer)
+- **Structured outputs**: Pass `structured_output_schema=MyModel` to `__init__` (e.g., HumanInTheLoopApprover)
+- **Tool binding**: Pass `tools=[...]` to `__init__` (e.g., QADiscoveryRouter)
+
+**State and Flow Control**:
 - **State updates**: Return a dict with only the keys being updated (not the full state)
 - **Interrupts**: Use `interrupt()` from `langgraph.types` to pause workflow for user input
-- **Structured outputs**: Use Pydantic BaseModel for routing decisions (see `HITLDecision`)
 - **Command-based routing**: Router nodes return `Command(goto="target", update={...})` for dynamic navigation
-- **Parallel execution**: MapSummarizer uses `asyncio.gather()` to summarize clusters in parallel
+- **Parallel execution**: Use `asyncio.gather()` for parallel LLM calls (e.g., MapSummarizer)
 
 ### Error Handling
 - Use try/except with logger.error() for error handling (see `docparser.py`)
