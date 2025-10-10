@@ -2,8 +2,6 @@
 
 PairReader lets you upload your documents and ask questions about them. It's like having a study partner who never forgets anything!
 
-**📊 Performance Monitoring:** Your interactions with PairReader are automatically tracked to help us improve the app's performance and quality. This helps us understand how the system responds to different questions and optimize the experience for everyone.
-
 ## 🎯 How to Use
 
 **Three usage modes:**
@@ -33,15 +31,18 @@ To **Update** or **Create**, click the buttons at startup or use commands: **/Up
 
 ## 🎨 Customize Your Experience
 
-Click the **Settings** icon to adjust:
+Click the **Settings** icon to adjust how PairReader's agents work. PairReader uses **3 agents**: a **Supervisor** that routes queries, a **QA Agent** (default for most questions), and a **Discovery Agent** (for overviews/exploration).
 
 ### General Settings
-- **LLM model** - Choose Haiku for speed or Sonnet for power
+- **LLM model** - Choose Haiku for speed or Sonnet for power (affects all agents)
+
+### QA Agent Settings
+The QA Agent handles most of your questions:
 - **Query decomposition** - Breaks complex questions into focused searches (recommended: ON)
 - **Number of documents** - How many document chunks to retrieve (default: 10)
 
 ### Discovery Agent Settings
-These settings control how the Discovery Agent explores your documents when you ask for overviews or themes:
+Only applies when you explicitly ask for overviews, themes, or exploration:
 
 **Sampling (choose one approach):**
 - **n_sample** - Exact number of documents to sample (set to 0 to use percentage instead)
@@ -57,5 +58,14 @@ These settings control how the Discovery Agent explores your documents when you 
   - ⚠️ Leave both at 0 for automatic sizing (recommended)
 
 💡 **Tip:** Start with defaults and only adjust if you need more/less detail in discovery results.
+
+## 🔬 Behind the Scenes
+
+PairReader uses modern LLMOps practices to ensure high-quality responses. Your conversations are automatically monitored to help improve the system's accuracy and speed. This means:
+- **Better answers** - We can see what works well and what doesn't
+- **Faster responses** - Performance bottlenecks are identified and fixed
+- **Continuous improvement** - The system gets smarter with each interaction
+
+All monitoring is done through LangSmith, providing complete transparency into how your questions are processed.
 
 **Happy reading!** 📖✨

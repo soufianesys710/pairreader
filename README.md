@@ -40,14 +40,14 @@ uv run chainlit create-secret
 ANTHROPIC_API_KEY=your_api_key_here
 CHAINLIT_AUTH_SECRET=your_secret_from_step_1
 
-# LangSmith (Activated by default for LLMOps - get API key from https://smith.langchain.com/)
+# LangSmith LLMOps Platform (Production observability - get API key from https://smith.langchain.com/)
 LANGSMITH_TRACING=true
 LANGSMITH_ENDPOINT=https://api.smith.langchain.com
 LANGSMITH_API_KEY=your_langsmith_api_key_here
 LANGSMITH_PROJECT=pairreader
 ```
 
-**LangSmith Integration**: PairReader uses LangSmith for automatic tracing, debugging, and LLMOps monitoring. When enabled, all agent workflows, LLM calls, and multi-agent interactions are automatically traced without any code changes, providing full visibility into your application's behavior.
+**Production LLMOps with LangSmith**: PairReader includes zero-configuration LLMOps for full observability. All agent workflows, LLM calls, and multi-agent interactions are automatically traced, enabling production debugging, performance monitoring, and continuous optimization without any code changes.
 
 ### Running the Application
 
@@ -83,12 +83,26 @@ Then open your browser to `http://localhost:8000`
 - **Contextual Embedding**: Chunks are contextualized for better retrieval
 - **Persistent Storage**: Your knowledge base is saved in ChromaDB and persists between sessions
 
-### LangSmith Tracing
-PairReader includes built-in LangSmith integration for LLMOps:
-- **Automatic Tracing**: All LangGraph workflows are traced when `LANGSMITH_TRACING=true`
-- **Zero Configuration**: No code changes needed - just set your API key
-- **Full Visibility**: Monitor agent orchestration, LLM calls, token usage, and performance
-- **Debug Tools**: Detailed traces for troubleshooting multi-agent interactions
+### Production-Ready LLMOps
+PairReader includes comprehensive LLMOps powered by LangSmith:
+
+**Observability & Debugging:**
+- **Automatic Tracing**: Zero-config tracing of all LangGraph workflows, agent routing, and LLM calls
+- **Multi-Agent Visibility**: Track how queries flow through PairReaderAgent → QA/Discovery agents
+- **Detailed Traces**: Inspect exact prompts, responses, state transitions, and tool calls
+- **Session Debugging**: Filter by thread_id to debug specific user conversations
+
+**Monitoring & Optimization:**
+- **Performance Metrics**: Track latency, token usage, and costs per node/agent/LLM
+- **Error Tracking**: Monitor fallback triggers, timeout occurrences, and failure patterns
+- **Cost Analysis**: Identify expensive queries and optimize token consumption
+- **Agent Analytics**: Understand QA vs Discovery usage patterns
+
+**Production Benefits:**
+- Deploy with confidence using built-in observability
+- Debug production issues with complete trace history
+- Optimize costs by analyzing token usage patterns
+- Continuously improve based on real user interactions
 
 View your traces at [smith.langchain.com](https://smith.langchain.com/) under the `pairreader` project.
 
@@ -145,7 +159,7 @@ The system automatically routes your query to the appropriate agent:
 - **LLM**: Anthropic's Claude (Haiku/Sonnet) via LangChain
 - **Vector Store**: ChromaDB for semantic search and clustering
 - **Document Parser**: Docling for robust PDF and text processing
-- **LLMOps**: LangSmith for automatic tracing, debugging, and monitoring (activated by default)
+- **LLMOps Platform**: LangSmith for production observability, tracing, debugging, and monitoring
 
 ## 💡 Tips for Best Results
 

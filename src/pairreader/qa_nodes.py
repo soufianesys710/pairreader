@@ -1,15 +1,14 @@
 from pairreader.schemas import PairReaderState, HITLDecision
 from pairreader.vectorestore import VectorStore
 from pairreader.docparser import DocParser
-from pairreader.utils import Verboser, ParamsMixin, UserIO
+from pairreader.utils import Verboser, BaseNode, LLMNode, RetrievalNode
 from pairreader.prompts_msgs import QA_PROMPTS, QA_MSGS
-from langchain.chat_models import init_chat_model
 from langchain_core.messages import AIMessage, SystemMessage, HumanMessage
 from langgraph.types import interrupt
 from typing import List, Optional, Dict, Any
 
 
-class QueryOptimizer(UserIO, ParamsMixin):
+class QueryOptimizer(LLMNode):
     """
     Optimizes user queries for vector store retrieval.
 
@@ -22,22 +21,9 @@ class QueryOptimizer(UserIO, ParamsMixin):
     Features:
         - query_decomposition: If True, decomposes the query into sub-queries (LLM decides how many).
     """
-    def __init__(
-            self,
-            llm_name: str = "anthropic:claude-3-5-haiku-latest",
-            fallback_llm_name: str = "anthropic:claude-3-7-sonnet-latest",
-            query_decomposition: bool = False
-    ):
-        self.llm_name = llm_name
-        self.fallback_llm_name = fallback_llm_name
+    def __init__(self, query_decomposition: bool = False, **kwargs):
+        super().__init__(**kwargs)
         self.query_decomposition = query_decomposition
-    
-    @property
-    def llm(self):
-        return (
-            init_chat_model(self.llm_name)
-            .with_fallbacks([init_chat_model(self.fallback_llm_name)])
-        )
 
     @Verboser(verbosity_level=2)
     async def __call__(self, state: PairReaderState, *args, **kwds) -> Dict[str, List[str]]:
@@ -61,31 +47,17 @@ class QueryOptimizer(UserIO, ParamsMixin):
         return state_update
     
 
-class HumanInTheLoopApprover(UserIO, ParamsMixin):
+class HumanInTheLoopApprover(LLMNode):
     """
     Allows the user to revise LLM-generated subqueries before retrieval.
 
     - Prompts user to review and edit subqueries.
     - Uses original subqueries if no user input is received within timeout.
     """
-    def __init__(
-        self,
-        llm_name: str = "anthropic:claude-3-5-haiku-latest",
-        fallback_llm_name: str = "anthropic:claude-3-7-sonnet-latest"
-    ):
-        self.llm_name = llm_name
-        self.fallback_llm_name = fallback_llm_name
 
-    @property
-    def llm(self):
-        return (
-            init_chat_model(self.llm_name)
-            .with_structured_output(HITLDecision)
-            .with_fallbacks([
-                init_chat_model(self.fallback_llm_name)
-                .with_structured_output(HITLDecision)
-            ])
-        )
+    def __init__(self, **kwargs):
+        """Initialize with HITLDecision structured output schema."""
+        super().__init__(structured_output_schema=HITLDecision, **kwargs)
 
     @Verboser(verbosity_level=2)
     async def __call__(self, state: PairReaderState, *args, **kwds) -> Dict[str, Any]:
@@ -107,15 +79,15 @@ class HumanInTheLoopApprover(UserIO, ParamsMixin):
         return state_update
 
 
-class InfoRetriever(UserIO, ParamsMixin):
+class InfoRetriever(RetrievalNode):
     """
     Retrieves relevant information from the vector store based on optimized queries.
 
     - Uses human-revised subqueries to query the vector store.
     - Returns retrieved documents and their metadata for summarization.
     """
-    def __init__(self, vectorstore: VectorStore, n_documents: int = 10):
-        self.vectorstore = vectorstore
+    def __init__(self, vectorstore: VectorStore, n_documents: int = 10, **kwargs):
+        super().__init__(vectorstore=vectorstore, **kwargs)
         self.n_documents = n_documents
 
     @Verboser(verbosity_level=2)
@@ -132,19 +104,17 @@ class InfoRetriever(UserIO, ParamsMixin):
         return state_update
 
 
-class InfoSummarizer(UserIO, ParamsMixin):
+class InfoSummarizer(LLMNode):
     """
     Summarizes retrieved information based on the user's original query.
 
     Args:
         llm_name: Name of the language model to use for summarization
     """
-    def __init__(self, llm_name: str = "anthropic:claude-3-5-haiku-latest"):
-        self.llm_name = llm_name
 
-    @property
-    def llm(self):
-        return init_chat_model(self.llm_name)
+    def __init__(self, llm_name: str = "anthropic:claude-3-5-haiku-latest", **kwargs):
+        """Initialize without fallback (original design)."""
+        super().__init__(llm_name=llm_name, fallback_llm_name=None, **kwargs)
 
     @Verboser(verbosity_level=2)
     async def __call__(self, state: PairReaderState, *args, **kwds) -> Dict[str, Any]:

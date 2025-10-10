@@ -213,12 +213,26 @@ Commands are triggered via Chainlit commands `/Create` or `/Update`, or via star
 
 ## Important Implementation Details
 
-### LangSmith Tracing and LLMOps
-- **Automatic Tracing**: LangSmith is activated by default when `LANGSMITH_TRACING=true` in `.env`
-- **Zero-Code Integration**: All LangGraph workflows, LLM calls, and agent interactions are automatically traced
-- **Debugging**: Provides detailed visibility into multi-agent orchestration, state transitions, and tool calls
-- **Monitoring**: Tracks performance metrics, token usage, and latency across all three agents
-- **Project**: Traces are organized under the `pairreader` project in LangSmith dashboard
+### LangSmith LLMOps Integration
+
+PairReader implements production-ready LLMOps through LangSmith for full observability and debugging.
+
+**Automatic Tracing** (Zero-Configuration):
+- Enable with `LANGSMITH_TRACING=true` in `.env` - no code changes needed
+- Traces all LangGraph workflows, LLM calls, agent routing, and state transitions
+- Organized under `pairreader` project at https://smith.langchain.com/
+
+**What Gets Traced**:
+- Multi-agent orchestration (PairReaderAgent → QA/Discovery routing)
+- LLM interactions (prompts, responses, structured outputs)
+- Tool calls (Command navigation, tool binding, interrupts)
+- Vectorstore operations (queries, retrieval, clustering)
+- State evolution across all nodes
+
+**Observability Benefits**:
+- **Debugging**: Trace failed queries, understand routing decisions, inspect exact prompts/responses
+- **Monitoring**: Track token usage, latency, error rates, and costs per node/agent/LLM
+- **Optimization**: Identify bottlenecks, expensive queries, and fallback usage patterns
 
 ### LLM Configuration
 - Default LLM: `anthropic:claude-3-5-haiku-latest`

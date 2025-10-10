@@ -1,9 +1,8 @@
 from pairreader.schemas import PairReaderState
 from pairreader.vectorestore import VectorStore
 from pairreader.docparser import DocParser
-from pairreader.utils import Verboser, ParamsMixin, UserIO
+from pairreader.utils import Verboser, LLMNode, RetrievalNode
 from pairreader.prompts_msgs import DISCOVERY_PROMPTS, DISCOVERY_MSGS
-from langchain.chat_models import init_chat_model
 from langchain_core.messages import AIMessage, SystemMessage, HumanMessage, ToolMessage
 from langchain_core.tools import tool, InjectedToolCallId, InjectedToolArg
 from langgraph.prebuilt import InjectedState
@@ -11,22 +10,24 @@ from langgraph.types import interrupt, Command
 from typing import List, Optional, Dict, Any, Annotated
 import asyncio
 
-class ClusterRetriever(UserIO, ParamsMixin):
+class ClusterRetriever(RetrievalNode):
     """
     Retrieves and clusters documents from vector store.
 
     - Samples documents from vectorstore
     - Clusters them using semantic similarity
     """
-    def __init__(self,
+    def __init__(
+        self,
         vectorstore: VectorStore,
         n_sample: Optional[int] = None,
         p_sample: Optional[float] = 0.1,
         cluster_percentage: Optional[float] = 0.05,
         min_cluster_size: Optional[int] = None,
-        max_cluster_size: Optional[int] = None
+        max_cluster_size: Optional[int] = None,
+        **kwargs
     ):
-        self.vectorstore = vectorstore
+        super().__init__(vectorstore=vectorstore, **kwargs)
         self.n_sample = n_sample
         self.p_sample = p_sample
         self.cluster_percentage = cluster_percentage
@@ -51,26 +52,13 @@ class ClusterRetriever(UserIO, ParamsMixin):
         return state_update
 
 
-class MapSummarizer(UserIO, ParamsMixin):
+class MapSummarizer(LLMNode):
     """
     Summarizes document clusters in parallel using LLM.
 
     - Expects clusters from state
     - Generates summaries for each cluster in parallel
     """
-    def __init__(self,
-        llm_name: str = "anthropic:claude-3-5-haiku-latest",
-        fallback_llm_name: str = "anthropic:claude-3-7-sonnet-latest"
-    ):
-        self.llm_name = llm_name
-        self.fallback_llm_name = fallback_llm_name
-
-    @property
-    def llm(self):
-        return (
-            init_chat_model(self.llm_name)
-            .with_fallbacks([init_chat_model(self.fallback_llm_name)])
-        )
 
     async def summarize_cluster(self, cluster, state) -> List:
         """Summarizes a single cluster of documents using LLM."""
@@ -98,20 +86,13 @@ class MapSummarizer(UserIO, ParamsMixin):
         return state_update
 
 
-class ReduceSummarizer(UserIO, ParamsMixin):
-    def __init__(self,
-        llm_name: str = "anthropic:claude-3-5-haiku-latest",
-        fallback_llm_name: str = "anthropic:claude-3-7-sonnet-latest"
-    ):
-        self.llm_name = llm_name
-        self.fallback_llm_name = fallback_llm_name
+class ReduceSummarizer(LLMNode):
+    """
+    Reduces cluster summaries into final overview.
 
-    @property
-    def llm(self):
-        return (
-            init_chat_model(self.llm_name)
-            .with_fallbacks([init_chat_model(self.fallback_llm_name)])
-        )
+    - Combines summaries from MapSummarizer
+    - Generates comprehensive knowledge base overview
+    """
 
     @Verboser(verbosity_level=2)
     async def __call__(self, state: PairReaderState) -> Dict:
