@@ -9,19 +9,34 @@ PairReader is a document chat application built with Chainlit that allows users 
 ## Development Commands
 
 ### Running the Application
+
+**Local Development:**
 ```bash
 uv run pairreader         # Recommended: Uses project.scripts entry point
 # OR
 uv run chainlit run src/pairreader/__main__.py -w  # Direct Chainlit command with watch mode
 ```
+
+**Docker Deployment:**
+```bash
+docker compose up -d --build    # Build and start in detached mode
+docker compose logs -f          # Follow logs
+docker compose down             # Stop and remove containers
+docker compose build --no-cache # Force rebuild without cache
+```
+
 The application will be available at `http://localhost:8000`
 
 ### Installing Dependencies
 ```bash
-uv sync                  # Install all dependencies
+uv sync                  # Install all dependencies (respects uv.lock)
 uv sync --group dev     # Install with dev dependencies (includes Jupyter)
-uv add <package-name>   # Add a new dependency
+uv add <package-name>   # Add a new dependency and update uv.lock
 ```
+
+**Important**:
+- Always use `uv sync --locked` in production/Docker to ensure reproducible builds
+- Build backend is `uv_build`
 
 ### Environment Setup
 Create a `.env` file in the project root with the following variables:
@@ -42,6 +57,40 @@ LANGSMITH_PROJECT=pairreader
 - Python 3.12+ required
 - Uses `uv` package manager (not pip)
 - Virtual environment is managed by `uv` in `.venv/`
+
+### Docker Architecture
+
+**Multi-Stage Build** (`Dockerfile`):
+- **Builder stage**: Uses `ghcr.io/astral-sh/uv:python3.12-bookworm-slim` as base
+  - `UV_PYTHON_DOWNLOADS=0`: Forces use of system Python (must match pyproject.toml version)
+  - `UV_COMPILE_BYTECODE=1`: Pre-compiles bytecode for faster container startup
+  - Dependencies installed first (`uv sync --locked --no-install-project --no-dev`) for better layer caching
+  - Project installed separately (`uv sync --locked --no-dev`) to leverage Docker layer caching
+- **Runtime stage**: Uses `python:3.12-slim-bookworm` (smaller footprint)
+  - Only copies `.venv/`, `src/`, `public/`, and `chainlit.md` from builder
+  - Sets `PYTHONPATH=/app/src` for module imports
+  - Chainlit runs on `0.0.0.0:8000` for container accessibility
+
+**Environment Variables** (`compose.yml`):
+- Required: `ANTHROPIC_API_KEY`, `CHAINLIT_AUTH_SECRET`
+- LangSmith (optional): `LANGSMITH_TRACING`, `LANGSMITH_ENDPOINT`, `LANGSMITH_API_KEY`, `LANGSMITH_PROJECT`
+- All variables loaded from `.env` file using `${VAR:-default}` syntax
+
+**Build Optimization** (`.dockerignore`):
+- Excludes: `.venv/`, `__pycache__/`, `.env`, data directories (`chroma/`, `.chainlit/`, `.files/`)
+- Includes: `chainlit.md`, `README.md` (required for package metadata)
+- This reduces build context and prevents sensitive data leakage
+
+**Data Persistence**:
+- ChromaDB data (`./chroma/`) is stored inside the container
+- Data persists across container restarts but is lost if container is removed
+- For production: Add volume mount in `compose.yml`: `volumes: - ./chroma:/app/chroma`
+
+**Key Implementation Notes**:
+- Python version **must match** across: `pyproject.toml`, builder base image, and runtime base image
+- `UV_PYTHON_DOWNLOADS=0` prevents uv from downloading a different Python version
+- `chainlit.md` and `README.md` must be copied before `uv sync --locked --no-dev` (required by package metadata)
+- Entry point uses full command: `chainlit run src/pairreader/__main__.py` (not `pairreader` script)
 
 ## Architecture Overview
 
@@ -478,23 +527,31 @@ class InfoRetriever(RetrievalNode):
 ```
 pairreader/
 ├── src/pairreader/
-│   ├── __main__.py           # Application entry point
+│   ├── __main__.py           # Application entry point with Chainlit integration
 │   ├── agents.py             # Multi-agent orchestration (PairReaderAgent, QAAgent, DiscoveryAgent)
 │   ├── pairreader_nodes.py   # Supervisor nodes (KnowledgeBaseHandler, QADiscoveryRouter)
 │   ├── qa_nodes.py           # QA Agent nodes (QueryOptimizer, InfoRetriever, etc.)
 │   ├── discovery_nodes.py    # Discovery Agent nodes (ClusterRetriever, MapSummarizer, ReduceSummarizer)
 │   ├── schemas.py            # Shared state definitions
-│   ├── prompts_msgs.py       # Centralized prompts and messages (NEW)
+│   ├── prompts_msgs.py       # Centralized prompts and messages
 │   ├── vectorestore.py       # ChromaDB interface with clustering support
-│   ├── docparser.py          # Document processing
-│   └── utils.py              # Decorators, mixins, and utilities
-├── pyproject.toml            # Project configuration
-└── CLAUDE.md                 # Developer documentation
+│   ├── docparser.py          # Document processing with Docling
+│   ├── clmemory.py           # Chainlit memory layer (InMemoryDataLayer)
+│   └── utils.py              # Base classes (BaseNode, LLMNode, RetrievalNode), decorators, BaseAgent
+├── public/                   # Static assets for Chainlit UI
+├── chainlit.md              # Chainlit welcome page content
+├── Dockerfile               # Multi-stage Docker build
+├── compose.yml              # Docker Compose configuration
+├── .dockerignore            # Docker build exclusions
+├── pyproject.toml           # Project metadata and dependencies
+└── CLAUDE.md                # Developer documentation (this file)
 ```
 
+**Key Files**:
 - Entry point: `src/pairreader/__main__.py` with `main()` function
-- Package script defined in `pyproject.toml`: `pairreader = "pairreader.__main__:main"`
-- This allows running via `uv run pairreader` or just `pairreader` after installation
+- Package script: `pyproject.toml` defines `pairreader = "pairreader.__main__:main"`
+- This allows running via `uv run pairreader` or `pairreader` after installation
+- Memory layer: `clmemory.py` implements custom `InMemoryDataLayer` for Chainlit chat history
 
 ## Future TODOs (from codebase comments)
 - Enhanced table and image extraction from Docling
