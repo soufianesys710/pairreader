@@ -1,0 +1,56 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+*.egg-info
+build/
+dist/
+wheels/
+
+# Virtual environment (we'll build fresh in Docker)
+.venv/
+venv/
+env/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Data directories (will be mounted as volumes)
+chroma/
+.chainlit/
+.files/
+data/
+logs/
+
+# Development files
+.git/
+.gitignore
+.vscode/
+.DS_Store
+idea/
+*.md
+!chainlit.md
+!README.md
+
+# Test files
+tests/
+*.test.py
+pytest.ini
+
+# Documentation
+docs/
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+
+# Jupyter
+*.ipynb
+.ipynb_checkpoints/
+
+# Cache
+*.cache
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/

@@ -30,7 +30,13 @@ class UserIO:
             res = await cl.AskUserMessage(content=message, timeout=timeout).send()
             return res["output"] if res else ""
         elif type == "file":
-            res = await cl.AskFileMessage(content=message, timeout=timeout, max_files=5, max_size_mb=10).send()
+            res = await cl.AskFileMessage(
+                content=message,
+                accept=["application/pdf", "text/plain"],
+                timeout=timeout,
+                max_files=5,
+                max_size_mb=10
+            ).send()
             return res if res else []
         else:
             raise ValueError(f"Unknown ask type: {type}")
