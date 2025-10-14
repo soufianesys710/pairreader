@@ -67,6 +67,21 @@ Then open your browser to `http://localhost:8000`
 
 **Default credentials:** username: `admin`, password: `admin`
 
+### 🐳 Docker Deployment (Alternative)
+
+Run PairReader with Docker:
+
+```bash
+# Create .env file (same format as above)
+docker compose up -d --build    # Start in background
+docker compose logs -f          # View logs
+docker compose down             # Stop
+```
+
+Access at `http://localhost:8000` with credentials `admin` / `admin`
+
+> **Note**: ChromaDB data is stored in the container and persists as long as the container exists.
+
 ## 💡 How to Use
 
 ### First Time Setup
