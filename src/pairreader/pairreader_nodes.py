@@ -37,7 +37,7 @@ class KnowledgeBaseHandler(BaseNode):
                 await self.send(
                     PAIRREADER_MSGS["kb_timeout"].format(user_command=user_command)
                 )
-                interrupt()
+                interrupt("")
             else:
                 await self.send(PAIRREADER_MSGS["kb_processing"].format(n_files=len(files)))
                 for f in files:
@@ -55,7 +55,7 @@ class KnowledgeBaseHandler(BaseNode):
                         len_docs=len_docs
                     )
                 )
-                interrupt()
+                interrupt("")
         # the user doesn't send a command, rather he should've sent a message, don't update the state
         else:
             return {}
