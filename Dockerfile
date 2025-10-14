@@ -7,16 +7,16 @@ ENV UV_PYTHON_DOWNLOADS=0 UV_COMPILE_BYTECODE=1
 
 WORKDIR /app
 
-# Copy all necessary files at once
-COPY uv.lock pyproject.toml README.md ./
-
 # Install dependencies first (no project installation)
+COPY uv.lock ./
+COPY pyproject.toml ./
+COPY README.md ./
 RUN uv sync --locked --no-install-project --no-dev
+
+# Install project now
 COPY chainlit.md ./
 COPY public ./public
 COPY src ./src
-
-# Install project now
 RUN uv sync --locked --no-dev
 
 # Runtime stage: it is important to use same python version as in pyproject.toml and the builder
