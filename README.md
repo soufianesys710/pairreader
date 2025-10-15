@@ -220,6 +220,24 @@ open htmlcov/index.html
 - `tests/fixtures/` - Test data and sample files
 - Markers: `@pytest.mark.unit`, `@pytest.mark.integration`, `@pytest.mark.slow`
 
+### Code Quality (Pre-commit Hooks)
+```bash
+# Install hooks (runs automatically on git commit)
+uv run pre-commit install
+
+# Run manually on all files
+uv run pre-commit run --all-files
+
+# Run specific hook
+uv run pre-commit run ruff --all-files
+```
+
+**Configured Hooks:**
+- File hygiene (trailing whitespace, EOF, line endings)
+- Python linting and formatting (ruff)
+- Secret detection (prevents committing API keys)
+- Notebook processing (keeps outputs, strips metadata)
+
 ## 📁 Project Structure
 
 ```
