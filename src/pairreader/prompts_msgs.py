@@ -14,7 +14,7 @@ This separation ensures clear distinction between AI processing and user interac
 
 DISCOVERY_PROMPTS = {
     "map_summarize_cluster": "Summarize the following cluster of documents in a concise and informative manner.\n\n{cluster_docs}",
-    "reduce_summaries": "Summarize the following sub-summaries resulted following the map-reduce summarisation pattern, in a concise and informative manner.\n\n{summaries_text}"
+    "reduce_summaries": "Summarize the following sub-summaries resulted following the map-reduce summarisation pattern, in a concise and informative manner.\n\n{summaries_text}",
 }
 
 PAIRREADER_PROMPTS = {
@@ -45,7 +45,7 @@ QA_PROMPTS = {
 User Query: {user_query}
 
 Retrieved Information:
-{retrieved_docs}"""
+{retrieved_docs}""",
 }
 
 # ============================================================================
@@ -55,7 +55,7 @@ Retrieved Information:
 DISCOVERY_MSGS = {
     "map_retrieving": "Retrieving and clustering document content...",
     "map_generating": "Generating summaries for {n_clusters} clusters...",
-    "reduce_synthesizing": "Synthesizing final overview from cluster summaries..."
+    "reduce_synthesizing": "Synthesizing final overview from cluster summaries...",
 }
 
 PAIRREADER_MSGS = {
@@ -65,7 +65,7 @@ PAIRREADER_MSGS = {
     "kb_success": "✓ Files uploaded: {file_names}. Knowledge base now contains {len_docs} document chunks. What do you want to know?",
     "kb_processing": "Processing {n_files} file(s)...",
     "kb_parsing": "Parsing {file_name}...",
-    "kb_ingesting": "Ingesting {n_chunks} chunks from {file_name}..."
+    "kb_ingesting": "Ingesting {n_chunks} chunks from {file_name}...",
 }
 
 QA_MSGS = {
@@ -73,5 +73,5 @@ QA_MSGS = {
     "hitl_timeout": "You haven't revised the LLM generated subqueries in the following 90s, we're using them as they are!",
     "retriever_querying": "Querying knowledge base with {n_queries} optimized queries...",
     "retriever_retrieved": "✓ Retrieved {n_docs} relevant document chunks.",
-    "summarizer_synthesizing": "Synthesizing answer from {n_docs} retrieved documents..."
+    "summarizer_synthesizing": "Synthesizing answer from {n_docs} retrieved documents...",
 }
