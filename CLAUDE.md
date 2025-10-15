@@ -105,8 +105,7 @@ uv run pre-commit run detect-secrets --all-files
 
 **Important Notes:**
 - Use `# noqa: <code>` comments for intentional violations (e.g., `# noqa: F841` for unused vars)
-- Use `<!-- pragma: allowlist secret -->` for false positive secrets in markdown
-- Secret baseline stored in `.secrets.baseline`
+- Use `<!-- pragma: allowlist secret -->` for false positive secrets (works inline, no baseline file needed)
 - Notebooks in `idea/` directory are processed but outputs are preserved for readability
 
 ### Environment Setup
