@@ -11,7 +11,6 @@ from langchain_core.messages import AIMessage, HumanMessage
 
 from pairreader.schemas import HITLDecision, PairReaderState
 
-
 # ============================================================================
 # HITLDecision Tests
 # ============================================================================

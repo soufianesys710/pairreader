@@ -7,12 +7,11 @@ This module provides common fixtures that can be used across all test files.
 import asyncio
 import os
 import tempfile
-from typing import Any, Dict, List
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, Mock
 
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
-
 
 # ============================================================================
 # Pytest Configuration
@@ -31,7 +30,7 @@ def event_loop_policy():
 
 
 @pytest.fixture
-def empty_state() -> Dict[str, Any]:
+def empty_state() -> dict[str, Any]:
 	"""Create an empty PairReaderState for testing."""
 	return {
 		"messages": [],
@@ -49,7 +48,7 @@ def empty_state() -> Dict[str, Any]:
 
 
 @pytest.fixture
-def sample_state() -> Dict[str, Any]:
+def sample_state() -> dict[str, Any]:
 	"""Create a sample PairReaderState with some data."""
 	return {
 		"messages": [
@@ -70,7 +69,7 @@ def sample_state() -> Dict[str, Any]:
 
 
 @pytest.fixture
-def sample_messages() -> List:
+def sample_messages() -> list:
 	"""Create sample LangChain messages for testing."""
 	return [
 		HumanMessage(content="Hello, how are you?"),
@@ -321,7 +320,7 @@ def mock_docparser(mock_document_converter, mock_hybrid_chunker):
 
 
 @pytest.fixture
-def default_node_params() -> Dict[str, Any]:
+def default_node_params() -> dict[str, Any]:
 	"""Default parameters for node initialization."""
 	return {
 		"llm_name": "anthropic:claude-3-5-haiku-latest",

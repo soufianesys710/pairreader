@@ -1,16 +1,24 @@
-from pairreader.docparser import DocParser
-from pairreader.vectorestore import VectorStore
-from pairreader.schemas import PairReaderState
-from pairreader.qa_nodes import QueryOptimizer, HumanInTheLoopApprover, InfoRetriever, InfoSummarizer
-from pairreader.discovery_nodes import ClusterRetriever, MapSummarizer, ReduceSummarizer
-from pairreader.pairreader_nodes import KnowledgeBaseHandler, QADiscoveryRouter
-from pairreader.utils import BaseAgent
-from langgraph.graph import START, END
+from typing import Literal
+
 from langgraph.checkpoint.memory import InMemorySaver
-from typing import Optional, Literal
+from langgraph.graph import END, START
+
+from pairreader.discovery_nodes import ClusterRetriever, MapSummarizer, ReduceSummarizer
+from pairreader.docparser import DocParser
+from pairreader.pairreader_nodes import KnowledgeBaseHandler, QADiscoveryRouter
+from pairreader.qa_nodes import (
+    HumanInTheLoopApprover,
+    InfoRetriever,
+    InfoSummarizer,
+    QueryOptimizer,
+)
+from pairreader.schemas import PairReaderState
+from pairreader.utils import BaseAgent
+from pairreader.vectorestore import VectorStore
+
 
 class PairReaderAgent(BaseAgent):
-    def __init__(self, docparser: Optional[DocParser] = None, vectorstore: Optional[VectorStore] = None):
+    def __init__(self, docparser: DocParser | None = None, vectorstore: VectorStore | None = None):
         self.docparser = docparser or DocParser()
         self.vectorstore = vectorstore or VectorStore()
         super().__init__(

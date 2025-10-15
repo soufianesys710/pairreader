@@ -1,7 +1,9 @@
+from typing import Annotated, Literal
+
 from langgraph.graph.message import AnyMessage, add_messages
-from typing_extensions import TypedDict
-from typing import Annotated, List, Optional, Dict, Literal
 from pydantic import BaseModel, Field
+from typing_extensions import TypedDict
+
 
 class HITLDecision(BaseModel):
     """Decision on where to route after human in the loop revision of subqueries."""
@@ -10,17 +12,17 @@ class HITLDecision(BaseModel):
     )
 
 class PairReaderState(TypedDict):
-    messages: Annotated[List[AnyMessage], add_messages]
-    user_query: Optional[str]
+    messages: Annotated[list[AnyMessage], add_messages]
+    user_query: str | None
     # knowledge base
-    user_command: Optional[str]
+    user_command: str | None
     # QA Agent
-    subqueries: Optional[List[str]]
-    human_in_the_loop_decision: Optional[HITLDecision]
-    retrieved_documents: Optional[List[str]]
-    retrieved_metadatas: Optional[List[Dict]]
-    summary: Optional[str]
+    subqueries: list[str] | None
+    human_in_the_loop_decision: HITLDecision | None
+    retrieved_documents: list[str] | None
+    retrieved_metadatas: list[dict] | None
+    summary: str | None
     # Discovery Agent
-    clusters: Optional[List]
-    cluster_summaries: Optional[List[str]]
-    summary_of_summaries: Optional[str]
+    clusters: list | None
+    cluster_summaries: list[str] | None
+    summary_of_summaries: str | None
