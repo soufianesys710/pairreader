@@ -1,14 +1,14 @@
 # TODO: make sure the distance metric is supported by the embedding model
 
 
-from pairreader.docparser import DocParser
-import chromadb
-import uuid
-import random
 import asyncio
-
-from typing import Any, Dict, List, Optional, Tuple, Union
 import logging
+import random
+import uuid
+from typing import Any
+
+import chromadb
+
 
 class VectorStore:
     """
@@ -25,7 +25,7 @@ class VectorStore:
     """
 
     def __init__(
-        self, 
+        self,
         persistent: bool = True,
         path: str = "./chroma",
         collection_name: str = "knowledge_base",
@@ -45,7 +45,9 @@ class VectorStore:
         try:
             self.collection = self.db.get_collection(collection_name)
         except Exception as e:
-            self.logger.warning(f"{collection_name} collection doesn't exist, creating it! Error: {e}")
+            self.logger.warning(
+                f"{collection_name} collection doesn't exist, creating it! Error: {e}"
+            )
             try:
                 self.collection = self.db.create_collection(collection_name)
             except Exception as ce:
@@ -56,9 +58,9 @@ class VectorStore:
         self.db.delete_collection(self.collection_name)
         self.collection = self.db.create_collection(self.collection_name)
 
-    def get_all_ids(self) -> List[str]:
+    def get_all_ids(self) -> list[str]:
         """Get all document IDs from the collection."""
-        self.all_ids =  self.collection.get()["ids"]
+        self.all_ids = self.collection.get()["ids"]
         if not self.all_ids:
             self.logger.warning("Collection is empty, returning empty sample")
             self.all_ids = []
@@ -73,23 +75,23 @@ class VectorStore:
             self.logger.warning("Collection is empty, returning empty clusters")
         return self.len_docs
 
-    def ingest_chunks(self, chunks: List[str], metadatas: Optional[Dict] = None) -> None:
+    def ingest_chunks(self, chunks: list[str], metadatas: dict | None = None) -> None:
         ids = [str(uuid.uuid4()) for _ in range(len(chunks))]
-        self.collection.add(
-            ids=ids, documents=chunks, metadatas=metadatas
-        )
+        self.collection.add(ids=ids, documents=chunks, metadatas=metadatas)
 
-    def ingest_embedded_chunks(self, embedded_chunks: List[Dict], metdatas: Optional[Dict] = None) -> None:
+    def ingest_embedded_chunks(
+        self, embedded_chunks: list[dict], metdatas: dict | None = None
+    ) -> None:
         pass
 
     def query(
         self,
-        query_texts: Optional[List[str]] = None,
-        contains: Optional[List[str]] = None,
-        not_contains: Optional[List[str]] = None,
+        query_texts: list[str] | None = None,
+        contains: list[str] | None = None,
+        not_contains: list[str] | None = None,
         n_documents: int = 10,
-        **kwargs: Any
-    ) -> Dict[str, Any]:
+        **kwargs: Any,
+    ) -> dict[str, Any]:
         """
         Query the ChromaDB collection.
         Args:
@@ -109,12 +111,11 @@ class VectorStore:
         # conditions
         where_document = [
             *[{"$contains": term} for term in contains or []],
-            *[{"$not_contains": term} for term in not_contains or []]
+            *[{"$not_contains": term} for term in not_contains or []],
         ]
         if where_document:
             query_args["where_document"] = (
-                where_document[0] if len(where_document) == 1
-                else {"$or": where_document}
+                where_document[0] if len(where_document) == 1 else {"$or": where_document}
             )
         if kwargs:
             query_args["where"] = kwargs
@@ -122,7 +123,7 @@ class VectorStore:
         results = self.collection.query(**query_args)
         return results
 
-    def get_sample(self, n_samples: Optional[int] = None, p_samples: Optional[float] = None) -> List[str]:
+    def get_sample(self, n_samples: int | None = None, p_samples: float | None = None) -> list[str]:
         """
         Sample document IDs from the collection.
 
@@ -139,12 +140,16 @@ class VectorStore:
             if n_samples < 1:
                 raise ValueError("n_samples must be at least 1")
             sample_size = min(n_samples, len(all_ids))
-            self.logger.info(f"Sampling {sample_size} documents (requested: {n_samples}) from {len(all_ids)} total")
+            self.logger.info(
+                f"Sampling {sample_size} documents (requested: {n_samples}) from {len(all_ids)} total"
+            )
         elif p_samples is not None:
             if not 0.0 <= p_samples <= 1.0:
                 raise ValueError("Percentage must be between 0.0 and 1.0")
             sample_size = max(1, int(len(all_ids) * p_samples))
-            self.logger.info(f"Sampled {sample_size} documents ({p_samples*100:.1f}%) from {len(all_ids)} total")
+            self.logger.info(
+                f"Sampled {sample_size} documents ({p_samples*100:.1f}%) from {len(all_ids)} total"
+            )
         else:
             raise ValueError("Either n_samples or p_samples must be provided")
 
@@ -152,7 +157,9 @@ class VectorStore:
         sampled_ids = random.sample(all_ids, sample_size)
         return sampled_ids
 
-    async def _query_cluster(self, sample_id: str, cluster_size: int, cluster_idx: int) -> Optional[List[Tuple[str, str]]]:
+    async def _query_cluster(
+        self, sample_id: str, cluster_size: int, cluster_idx: int
+    ) -> list[tuple[str, str]] | None:
         """
         Query a single cluster asynchronously.
 
@@ -170,33 +177,41 @@ class VectorStore:
         sample_doc = self.collection.get(ids=[sample_id])
 
         if not sample_doc["documents"] or not sample_doc["documents"][0]:
-            self.logger.warning(f"Cluster {cluster_idx}: Sample ID {sample_id} not found or has no text, skipping")
+            self.logger.warning(
+                f"Cluster {cluster_idx}: Sample ID {sample_id} not found or has no text, skipping"
+            )
             return None
 
         sample_text = sample_doc["documents"][0]
 
         # Query using the sample document as query text
-        results = self.collection.query(
-            query_texts=[sample_text],
-            n_results=cluster_size
-        )
+        results = self.collection.query(query_texts=[sample_text], n_results=cluster_size)
 
         # Extract IDs and documents from results, zip them into tuples
-        if results["ids"] and results["ids"][0] and results["documents"] and results["documents"][0]:
-            cluster_data = list(zip(results["ids"][0], results["documents"][0]))
-            self.logger.info(f"Cluster {cluster_idx}: Retrieved {len(cluster_data)} documents for sample ID {sample_id}")
+        if (
+            results["ids"]
+            and results["ids"][0]
+            and results["documents"]
+            and results["documents"][0]
+        ):
+            cluster_data = list(zip(results["ids"][0], results["documents"][0], strict=False))
+            self.logger.info(
+                f"Cluster {cluster_idx}: Retrieved {len(cluster_data)} documents for sample ID {sample_id}"
+            )
             return cluster_data
         else:
-            self.logger.warning(f"Cluster {cluster_idx}: No results found for sample ID {sample_id}")
+            self.logger.warning(
+                f"Cluster {cluster_idx}: No results found for sample ID {sample_id}"
+            )
             return None
 
     async def get_clusters(
         self,
-        sample_ids: List[str],
+        sample_ids: list[str],
         cluster_percentage: float,
-        min_cluster_size: Optional[int] = None,
-        max_cluster_size: Optional[int] = None
-    ) -> List[List[Tuple[str, str]]]:
+        min_cluster_size: int | None = None,
+        max_cluster_size: int | None = None,
+    ) -> list[list[tuple[str, str]]]:
         """
         Create semantic clusters by using sample documents as query points.
         Queries are performed in parallel for efficiency.

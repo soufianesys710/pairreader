@@ -1,15 +1,17 @@
 # for more info on docling rich parsing and chunking and serialization
 # concepts: https://docling-project.github.io/docling/concepts/
-# examples with code: https://docling-project.github.io/docling/examples/
+# examples with code: https://docling-project.github.io/docling/examples/
 # TODO: more in depth table and image information extraction techniques from docling
 # TODO: embedding and tokenization aware chunking
 # TODO: retrive chunk with metadata when possible e.g. page in a pdf file
 # TODO: make sure the distance metric is supported by the embedding model
 
-from docling.document_converter import DocumentConverter
-from docling.chunking import HybridChunker
-import os
 import logging
+import os
+
+from docling.chunking import HybridChunker
+from docling.document_converter import DocumentConverter
+
 
 class DocParser:
     """
@@ -67,7 +69,7 @@ class DocParser:
             return None
         else:
             return chunks[index]
-        
+
     def get_embedded_chunk(self, index):
         pass
 

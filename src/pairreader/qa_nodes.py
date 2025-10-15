@@ -1,11 +1,11 @@
-from pairreader.schemas import PairReaderState, HITLDecision
+from typing import Any
+
+from langchain_core.messages import AIMessage, HumanMessage
+
+from pairreader.prompts_msgs import QA_MSGS, QA_PROMPTS
+from pairreader.schemas import HITLDecision, PairReaderState
+from pairreader.utils import LLMNode, RetrievalNode, Verboser
 from pairreader.vectorestore import VectorStore
-from pairreader.docparser import DocParser
-from pairreader.utils import Verboser, BaseNode, LLMNode, RetrievalNode
-from pairreader.prompts_msgs import QA_PROMPTS, QA_MSGS
-from langchain_core.messages import AIMessage, SystemMessage, HumanMessage
-from langgraph.types import interrupt
-from typing import List, Optional, Dict, Any
 
 
 class QueryOptimizer(LLMNode):
@@ -21,31 +21,28 @@ class QueryOptimizer(LLMNode):
     Features:
         - query_decomposition: If True, decomposes the query into sub-queries (LLM decides how many).
     """
+
     def __init__(self, query_decomposition: bool = False, **kwargs):
         super().__init__(**kwargs)
         self.query_decomposition = query_decomposition
 
     @Verboser(verbosity_level=2)
-    async def __call__(self, state: PairReaderState, *args, **kwds) -> Dict[str, List[str]]:
+    async def __call__(self, state: PairReaderState, *args, **kwds) -> dict[str, list[str]]:
         """Optimize user query for retrieval."""
         if self.query_decomposition:
-            msg = HumanMessage(
-                QA_PROMPTS["query_decompose"].format(user_query=state['user_query'])
-            )
+            msg = HumanMessage(QA_PROMPTS["query_decompose"].format(user_query=state["user_query"]))
             messages = list(state["messages"]) + [msg]
             content = await self.stream(self.llm, messages)
             response = AIMessage(content=content)
             state_update = {
                 "messages": [msg, response],
-                "subqueries": [s.strip() for s in response.content.split("\n") if s.strip()]
+                "subqueries": [s.strip() for s in response.content.split("\n") if s.strip()],
             }
         else:
             # No decomposition, use original query
-            state_update = {
-                "subqueries": [state["user_query"]]
-            }
+            state_update = {"subqueries": [state["user_query"]]}
         return state_update
-    
+
 
 class HumanInTheLoopApprover(LLMNode):
     """
@@ -60,12 +57,10 @@ class HumanInTheLoopApprover(LLMNode):
         super().__init__(structured_output_schema=HITLDecision, **kwargs)
 
     @Verboser(verbosity_level=2)
-    async def __call__(self, state: PairReaderState, *args, **kwds) -> Dict[str, Any]:
+    async def __call__(self, state: PairReaderState, *args, **kwds) -> dict[str, Any]:
         """Request user revision of LLM subqueries."""
         user_feedback = await self.ask(
-            type="text",
-            message=QA_MSGS["hitl_ask_feedback"],
-            timeout=90
+            type="text", message=QA_MSGS["hitl_ask_feedback"], timeout=90
         )
         # if the user doesn't answer at timeout
         if not user_feedback:
@@ -86,20 +81,21 @@ class InfoRetriever(RetrievalNode):
     - Uses human-revised subqueries to query the vector store.
     - Returns retrieved documents and their metadata for summarization.
     """
+
     def __init__(self, vectorstore: VectorStore, n_documents: int = 10, **kwargs):
         super().__init__(vectorstore=vectorstore, **kwargs)
         self.n_documents = n_documents
 
     @Verboser(verbosity_level=2)
-    async def __call__(self, state: PairReaderState, *args, **kwds) -> Dict[str, Any]:
+    async def __call__(self, state: PairReaderState, *args, **kwds) -> dict[str, Any]:
         """Retrieve documents from vector store."""
         subqueries = [state.get("user_query")] + state.get("subqueries")
         await self.send(QA_MSGS["retriever_querying"].format(n_queries=len(subqueries)))
         results = self.vectorstore.query(query_texts=subqueries, n_documents=self.n_documents)
-        await self.send(QA_MSGS["retriever_retrieved"].format(n_docs=len(results['documents'][0])))
+        await self.send(QA_MSGS["retriever_retrieved"].format(n_docs=len(results["documents"][0])))
         state_update = {
             "retrieved_documents": results["documents"][0],
-            "retrieved_metadatas": results["metadatas"][0]
+            "retrieved_metadatas": results["metadatas"][0],
         }
         return state_update
 
@@ -117,17 +113,17 @@ class InfoSummarizer(LLMNode):
         super().__init__(llm_name=llm_name, fallback_llm_name=None, **kwargs)
 
     @Verboser(verbosity_level=2)
-    async def __call__(self, state: PairReaderState, *args, **kwds) -> Dict[str, Any]:
+    async def __call__(self, state: PairReaderState, *args, **kwds) -> dict[str, Any]:
         """Summarize retrieved documents for user query."""
-        await self.send(QA_MSGS["summarizer_synthesizing"].format(n_docs=len(state['retrieved_documents'])))
+        await self.send(
+            QA_MSGS["summarizer_synthesizing"].format(n_docs=len(state["retrieved_documents"]))
+        )
         retrieved_docs = "\n\n".join(state["retrieved_documents"])
         prompt = QA_PROMPTS["info_summarizer"].format(
-            user_query=state['user_query'],
-            retrieved_docs=retrieved_docs
+            user_query=state["user_query"], retrieved_docs=retrieved_docs
         )
         state["messages"].append(HumanMessage(prompt))
         content = await self.stream(self.llm, state["messages"])
         response = AIMessage(content=content)
         state_update = {"messages": [response], "summary": response.content}
         return state_update
-        
