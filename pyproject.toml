@@ -23,6 +23,13 @@ dev = [
     "jupyter>=1.1.1",
     "notebook>=7.4.5",
 ]
+test = [
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.24.0",
+    "pytest-cov>=6.0.0",
+    "pytest-mock>=3.14.0",
+    "httpx>=0.28.1",
+]
 
 [project.scripts]
 pairreader = "pairreader.__main__:main"
@@ -30,3 +37,24 @@ pairreader = "pairreader.__main__:main"
 [build-system]
 requires = ["uv_build>=0.8.17,<0.9.0"]
 build-backend = "uv_build"
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+addopts = [
+    "-ra",
+    "--strict-markers",
+    "--strict-config",
+    "--showlocals",
+    "--cov=src/pairreader",
+    "--cov-report=term-missing",
+    "--cov-report=html",
+]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+markers = [
+    "unit: Unit tests for individual components",
+    "integration: Integration tests with mocked external dependencies",
+    "slow: Tests that take a long time to run",
+]
+
