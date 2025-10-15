@@ -324,7 +324,7 @@ All prompts use `.format()` for variable substitution to maintain clean separati
 **Chainlit Integration** (`src/pairreader/__main__.py`)
 - Entry point with `main()` function for CLI command
 - Custom `InMemoryDataLayer` for chat history (not persisted between restarts)
-- Password authentication: username/password = "admin"/"admin" (TODO: move to secure storage)
+- Password authentication: username/password = "admin"/"admin" (TODO: move to secure storage)  <!-- pragma: allowlist secret -->
 - Settings UI with general and discovery-specific parameters:
   - General: LLM selection, query decomposition toggle, retrieval document count
   - Discovery Agent: sampling parameters (`n_sample`, `p_sample`), clustering parameters (`cluster_percentage`, `min_cluster_size`, `max_cluster_size`)

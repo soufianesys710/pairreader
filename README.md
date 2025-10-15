@@ -64,7 +64,7 @@ uv run pairreader
 
 Then open your browser to `http://localhost:8000`
 
-**Default credentials:** username: `admin`, password: `admin`
+**Default credentials:** username: `admin`, password: `admin` <!-- pragma: allowlist secret -->
 
 ### 🐳 Docker Deployment (Alternative)
 
