@@ -1,4 +1,3 @@
-
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.tools import tool
 from langgraph.types import Command, interrupt
@@ -18,6 +17,7 @@ class KnowledgeBaseHandler(BaseNode):
     - Prompts user to upload files and ingests them into the vector store.
     - Interrupts flow if no files are uploaded within timeout.
     """
+
     def __init__(self, docparser: DocParser, vectorstore: VectorStore):
         self.docparser = docparser
         self.vectorstore = vectorstore
@@ -25,20 +25,16 @@ class KnowledgeBaseHandler(BaseNode):
     @Verboser(verbosity_level=2)
     async def __call__(self, state: PairReaderState, *args, **kwds):
         """Handle Chainlit commands and file uploads."""
-        # if the user sends a command
-        if (user_command := state.get("user_command")):
+        # if the user sends a command
+        if user_command := state.get("user_command"):
             if user_command == "Create":
                 await self.send(PAIRREADER_MSGS["kb_flushing"])
                 self.vectorstore.flush()
             files = await self.ask(
-                type="file",
-                message=PAIRREADER_MSGS["kb_upload_files"],
-                timeout=90
+                type="file", message=PAIRREADER_MSGS["kb_upload_files"], timeout=90
             )
             if not files:
-                await self.send(
-                    PAIRREADER_MSGS["kb_timeout"].format(user_command=user_command)
-                )
+                await self.send(PAIRREADER_MSGS["kb_timeout"].format(user_command=user_command))
                 interrupt("")
             else:
                 await self.send(PAIRREADER_MSGS["kb_processing"].format(n_files=len(files)))
@@ -47,14 +43,17 @@ class KnowledgeBaseHandler(BaseNode):
                     self.docparser.parse(f.path)
                     chunks = self.docparser.get_chunks()
                     metadatas = [{"fname": f.name}] * len(chunks)
-                    await self.send(PAIRREADER_MSGS["kb_ingesting"].format(n_chunks=len(chunks), file_name=f.name))
+                    await self.send(
+                        PAIRREADER_MSGS["kb_ingesting"].format(
+                            n_chunks=len(chunks), file_name=f.name
+                        )
+                    )
                     self.vectorstore.ingest_chunks(chunks, metadatas)
                 # files uploaded and parsed, ask for a user query
                 len_docs = self.vectorstore.get_len_docs()
                 await self.send(
                     PAIRREADER_MSGS["kb_success"].format(
-                        file_names=[f.name for f in files],
-                        len_docs=len_docs
+                        file_names=[f.name for f in files], len_docs=len_docs
                     )
                 )
                 interrupt("")
@@ -77,22 +76,25 @@ class QADiscoveryRouter(LLMNode):
 
     @Verboser(verbosity_level=2)
     async def __call__(self, state: PairReaderState) -> Command:
-        prompt = PAIRREADER_PROMPTS["qa_discovery_router"].format(user_query=state['user_query'])
+        prompt = PAIRREADER_PROMPTS["qa_discovery_router"].format(user_query=state["user_query"])
         messages = [HumanMessage(content=prompt)]
         response = await self.llm.ainvoke(messages)
         tool_call = response.tool_calls[0]
         return Command(
             goto=tool_call["name"],
-            update={"messages": [AIMessage(content=f"Routing to {tool_call['name']}")]}
+            update={"messages": [AIMessage(content=f"Routing to {tool_call['name']}")]},
         )
 
-
-    @tool(description="Handoff to QAAgent - Use for ALL regular questions and information requests (DEFAULT)")
+    @tool(
+        description="Handoff to QAAgent - Use for ALL regular questions and information requests (DEFAULT)"
+    )
     def qa_agent():
         """Use this to handoff to QA agent for regular questions. This is the DEFAULT agent."""
         return "qa_agent"
 
-    @tool(description="Handoff to DiscoveryAgent - Use ONLY when user explicitly requests overview/themes/exploration")
+    @tool(
+        description="Handoff to DiscoveryAgent - Use ONLY when user explicitly requests overview/themes/exploration"
+    )
     def discovery_agent():
         """Use this to handoff to discovery agent ONLY for explicit exploration requests (overview, themes, key ideas, etc.)."""
         return "discovery_agent"

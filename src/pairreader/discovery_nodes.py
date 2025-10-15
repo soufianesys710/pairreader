@@ -15,6 +15,7 @@ class ClusterRetriever(RetrievalNode):
     - Samples documents from vectorstore
     - Clusters them using semantic similarity
     """
+
     def __init__(
         self,
         vectorstore: VectorStore,
@@ -23,7 +24,7 @@ class ClusterRetriever(RetrievalNode):
         cluster_percentage: float | None = 0.05,
         min_cluster_size: int | None = None,
         max_cluster_size: int | None = None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(vectorstore=vectorstore, **kwargs)
         self.n_sample = n_sample
@@ -36,15 +37,12 @@ class ClusterRetriever(RetrievalNode):
     async def __call__(self, state: PairReaderState) -> dict:
         """Samples and clusters documents from vectorstore."""
         await self.send(DISCOVERY_MSGS["map_retrieving"])
-        sampled_ids = self.vectorstore.get_sample(
-            n_samples=self.n_sample,
-            p_samples=self.p_sample
-        )
+        sampled_ids = self.vectorstore.get_sample(n_samples=self.n_sample, p_samples=self.p_sample)
         clusters = await self.vectorstore.get_clusters(
             sampled_ids,
             cluster_percentage=self.cluster_percentage,
             min_cluster_size=self.min_cluster_size,
-            max_cluster_size=self.max_cluster_size
+            max_cluster_size=self.max_cluster_size,
         )
         state_update = {"clusters": clusters}
         return state_update
@@ -60,7 +58,7 @@ class MapSummarizer(LLMNode):
 
     async def summarize_cluster(self, cluster, state) -> list:
         """Summarizes a single cluster of documents using LLM."""
-        cluster_docs = '\n'.join([f"doc {i+1}:\n{doc[1]} " for i, doc in enumerate(cluster)])
+        cluster_docs = "\n".join([f"doc {i+1}:\n{doc[1]} " for i, doc in enumerate(cluster)])
         prompt = DISCOVERY_PROMPTS["map_summarize_cluster"].format(cluster_docs=cluster_docs)
         msg = HumanMessage(prompt)
         messages = list(state["messages"]) + [msg]
@@ -78,9 +76,7 @@ class MapSummarizer(LLMNode):
 
         # state update
         cluster_summaries = [summary[-1].content for summary in msg_summaries]
-        state_update = {
-            "cluster_summaries": cluster_summaries
-        }
+        state_update = {"cluster_summaries": cluster_summaries}
         return state_update
 
 
@@ -96,14 +92,13 @@ class ReduceSummarizer(LLMNode):
     async def __call__(self, state: PairReaderState) -> dict:
         """Reduces cluster summaries into a final overview using LLM."""
         await self.send(DISCOVERY_MSGS["reduce_synthesizing"])
-        summaries_text = '\n'.join((f"map-summary {i+1}:\n{s} " for i, s in enumerate(state["cluster_summaries"])))
+        summaries_text = "\n".join(
+            (f"map-summary {i+1}:\n{s} " for i, s in enumerate(state["cluster_summaries"]))
+        )
         prompt = DISCOVERY_PROMPTS["reduce_summaries"].format(summaries_text=summaries_text)
         msg = HumanMessage(prompt)
         messages = list(state["messages"]) + [msg]
         content = await self.stream(self.llm, messages)
         response = AIMessage(content=content)
-        state_update = {
-            "messages": [msg, response],
-            "summary_of_summaries": response.content
-        }
+        state_update = {"messages": [msg, response], "summary_of_summaries": response.content}
         return state_update

@@ -27,8 +27,8 @@ class PairReaderAgent(BaseAgent):
                 ("knowledge_base_handler", KnowledgeBaseHandler(self.docparser, self.vectorstore)),
                 ("qa_discovery_router", QADiscoveryRouter()),
                 ("qa_agent", QAAgent(self.vectorstore)),
-                ("discovery_agent", DiscoveryAgent(self.vectorstore))
-            ]
+                ("discovery_agent", DiscoveryAgent(self.vectorstore)),
+            ],
         )
         self.checkpointer = InMemorySaver()
         self.builder.add_edge(START, "knowledge_base_handler")
@@ -48,7 +48,7 @@ class DiscoveryAgent(BaseAgent):
                 ("cluster_retriever", ClusterRetriever(vectorstore=self.vectorstore)),
                 ("map_summarizer", MapSummarizer()),
                 ("reduce_summarizer", ReduceSummarizer()),
-            ]
+            ],
         )
         self.checkpointer = InMemorySaver()
         self.builder.add_edge(START, "cluster_retriever")
@@ -56,6 +56,7 @@ class DiscoveryAgent(BaseAgent):
         self.builder.add_edge("map_summarizer", "reduce_summarizer")
         self.builder.add_edge("reduce_summarizer", END)
         self.workflow = self.builder.compile(checkpointer=self.checkpointer)
+
 
 class QAAgent(BaseAgent):
     def __init__(self, vectorstore: VectorStore):
@@ -66,21 +67,28 @@ class QAAgent(BaseAgent):
                 ("query_optimizer", QueryOptimizer(query_decomposition=True)),
                 ("info_retriever", InfoRetriever(self.vectorstore)),
                 ("human_in_the_loop_approver", HumanInTheLoopApprover()),
-                ("info_summarizer", InfoSummarizer())
-            ]
+                ("info_summarizer", InfoSummarizer()),
+            ],
         )
         self.checkpointer = InMemorySaver()
         self.builder.add_edge(START, "query_optimizer")
         self.builder.add_edge("query_optimizer", "human_in_the_loop_approver")
-        self.builder.add_conditional_edges("human_in_the_loop_approver", self.route_after_human_in_the_loop_approver)
+        self.builder.add_conditional_edges(
+            "human_in_the_loop_approver", self.route_after_human_in_the_loop_approver
+        )
         self.builder.add_edge("info_retriever", "info_summarizer")
         self.builder.add_edge("info_summarizer", END)
         self.workflow = self.builder.compile(checkpointer=self.checkpointer)
 
     @staticmethod
-    def route_after_human_in_the_loop_approver(state: PairReaderState) -> Literal["query_optimizer", "info_retriever"]:
+    def route_after_human_in_the_loop_approver(
+        state: PairReaderState,
+    ) -> Literal["query_optimizer", "info_retriever"]:
         """Route based on structured output decision from human in the loop approver node."""
-        if state.get("human_in_the_loop_decision") and state["human_in_the_loop_decision"].next_node:
+        if (
+            state.get("human_in_the_loop_decision")
+            and state["human_in_the_loop_decision"].next_node
+        ):
             return state["human_in_the_loop_decision"].next_node
         else:
             return "info_retriever"
