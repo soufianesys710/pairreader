@@ -109,7 +109,7 @@ class TestLLMNode:
         assert node.llm_name == "custom-model"
         assert node.fallback_llm_name == "custom-fallback"
         assert node.tools == ["tool1", "tool2"]
-        assert node.structured_output_schema == dict
+        assert node.structured_output_schema is dict
 
     @pytest.mark.unit
     def test_llm_node_no_fallback(self):
@@ -135,7 +135,7 @@ class TestLLMNode:
         tools = [Mock(), Mock()]
         node = LLMNode(tools=tools)
 
-        llm = node.llm
+        llm = node.llm  # noqa: F841
 
         # Verify bind_tools was called (called for both primary and fallback LLM)
         assert mock_llm.bind_tools.called
@@ -151,7 +151,7 @@ class TestLLMNode:
 
         node = LLMNode(structured_output_schema=TestSchema)
 
-        llm = node.llm
+        llm = node.llm  # noqa: F841
 
         # Verify with_structured_output was called (called for both primary and fallback LLM)
         assert mock_llm.with_structured_output.called
@@ -162,7 +162,7 @@ class TestLLMNode:
         """Test that llm property correctly adds fallback."""
         node = LLMNode(fallback_llm_name="fallback-model")
 
-        llm = node.llm
+        llm = node.llm  # noqa: F841
 
         # Verify with_fallbacks was called
         mock_llm.with_fallbacks.assert_called_once()
