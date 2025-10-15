@@ -1,0 +1,67 @@
+# Pre-commit hooks - Runs before each commit to ensure code quality
+# Install: uv run pre-commit install | Run manually: uv run pre-commit run --all-files
+
+repos:
+  # Standard file hygiene checks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace               # Remove whitespace at end of lines
+        exclude: ^tests/fixtures/
+      - id: end-of-file-fixer                 # Ensure files end with newline
+        exclude: ^tests/fixtures/
+      - id: check-yaml                        # Validate YAML syntax
+        args: [--unsafe]                      # Allow custom YAML tags
+      - id: check-toml                        # Validate TOML syntax
+      - id: check-json                        # Validate JSON syntax
+      - id: check-added-large-files           # Prevent committing files >1MB
+        args: [--maxkb=1000]
+      - id: check-case-conflict               # Detect filename case conflicts
+      - id: check-merge-conflict              # Detect unresolved merge markers
+      - id: check-docstring-first             # Ensure docstring comes before code
+      - id: debug-statements                  # Detect leftover breakpoint() calls
+      - id: mixed-line-ending                 # Normalize line endings to LF
+        args: [--fix=lf]
+
+  # Ruff - Fast Python linter + formatter (replaces Black, isort, flake8)
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.4
+    hooks:
+      - id: ruff                              # Lint: find bugs, unused code, style issues
+        args: [--fix, --exit-non-zero-on-fix] # Auto-fix when possible
+      - id: ruff-format                       # Format: spacing, line length, quotes
+
+  # Detect secrets - Prevent committing API keys, tokens, passwords
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        args: [--baseline, .secrets.baseline] # Known false positives
+        exclude: package.lock.json
+
+  # Jupyter notebooks - Apply ruff linter and formatter to code cells
+  - repo: https://github.com/nbQA-dev/nbQA
+    rev: 1.9.1
+    hooks:
+      - id: nbqa-ruff                         # Lint notebook code cells
+        args: [--fix, --exit-non-zero-on-fix]
+        additional_dependencies: [ruff==0.8.4]
+      - id: nbqa-ruff                         # Format notebook code cells
+        name: nbqa-ruff-format
+        args: [--nbqa-format]
+        additional_dependencies: [ruff==0.8.4]
+
+  # Jupyter notebooks - Clean volatile metadata (keeps outputs/graphs for readability)
+  - repo: https://github.com/kynan/nbstripout
+    rev: 0.8.1
+    hooks:
+      - id: nbstripout
+        args:
+          - --keep-output                     # Keep cell outputs and graphs
+          - --extra-keys                      # Strip these metadata keys:
+          - |
+            metadata.kernelspec               # Kernel version (varies by env)
+            metadata.language_info.version    # Python version
+            cell.metadata.execution           # Execution timestamps
+            cell.metadata.scrolled            # UI scroll state
+            cell.metadata.pycharm             # PyCharm metadata
