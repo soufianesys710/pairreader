@@ -47,9 +47,9 @@ async def set_starters():
 
 @cl.on_chat_start
 async def on_chat_start():
-    current_user = cl.user_session.get("user")
+    current_user = cl.user_session.get("user")  # noqa: F841
     await cl.context.emitter.set_commands(commands)
-    settings = await cl.ChatSettings(
+    settings = await cl.ChatSettings(  # noqa: F841
         [
             Select(
                 id="LLM",
