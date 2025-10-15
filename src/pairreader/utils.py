@@ -1,10 +1,11 @@
+import logging
+from functools import wraps
+from typing import Any, Literal
+
+import chainlit as cl
+from langchain_core.runnables import RunnableConfig
 from langgraph.config import get_stream_writer
 from langgraph.graph.state import StateGraph
-from langchain_core.runnables import RunnableConfig
-from functools import wraps
-from typing import Dict, List, Tuple, Any, Literal, Optional, Union
-import logging
-import chainlit as cl
 
 # ============================================================================
 # Core Node Abstractions (Most Important)
@@ -13,7 +14,7 @@ import chainlit as cl
 class UserIO:
     """Handle user input/output operations, abstracting away UI framework details."""
 
-    async def ask(self, type: Literal["text", "file"], message: str, timeout: Optional[int] = None) -> Union[str, List[Any]]:
+    async def ask(self, type: Literal["text", "file"], message: str, timeout: int | None = None) -> str | list[Any]:
         """
         Ask the user for input.
 
@@ -102,7 +103,7 @@ class BaseNode(UserIO):
         """
         return {key: value for key, value in self.__dict__.items() if not key.startswith("_")}
 
-    async def __call__(self, state: Dict, *args, **kwargs) -> Dict:
+    async def __call__(self, state: dict, *args, **kwargs) -> dict:
         """
         Execute the node logic.
 
@@ -151,9 +152,9 @@ class LLMNode(BaseNode):
     def __init__(
         self,
         llm_name: str = "anthropic:claude-3-5-haiku-latest",
-        fallback_llm_name: Optional[str] = "anthropic:claude-3-7-sonnet-latest",
-        tools: Optional[List[Any]] = None,
-        structured_output_schema: Optional[type] = None,
+        fallback_llm_name: str | None = "anthropic:claude-3-7-sonnet-latest",
+        tools: list[Any] | None = None,
+        structured_output_schema: type | None = None,
         **kwargs
     ):
         """
@@ -248,7 +249,7 @@ class RetrievalNode(BaseNode):
 class BaseAgent:
     """Base class for LangGraph agents with common initialization and workflow patterns."""
 
-    def __init__(self, state: type, nodes: List[Tuple[str, Any]]):
+    def __init__(self, state: type, nodes: list[tuple[str, Any]]):
         """
         Initialize the base agent.
 
@@ -264,7 +265,7 @@ class BaseAgent:
             setattr(self, node[0], node[1])
             self.builder.add_node(node[0], node[1])
 
-    async def __call__(self, input: Dict, config: RunnableConfig):
+    async def __call__(self, input: dict, config: RunnableConfig):
         """Execute the workflow with given input and config."""
         return await self.workflow.ainvoke(input=input, config=config)
 

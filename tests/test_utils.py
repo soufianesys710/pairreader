@@ -9,12 +9,11 @@ Tests cover:
 """
 
 import logging
-from unittest.mock import AsyncMock, MagicMock, Mock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
 from pairreader.utils import BaseAgent, BaseNode, LLMNode, RetrievalNode, Verboser
-
 
 # ============================================================================
 # BaseNode Tests

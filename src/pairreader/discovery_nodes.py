@@ -1,14 +1,12 @@
-from pairreader.schemas import PairReaderState
-from pairreader.vectorestore import VectorStore
-from pairreader.docparser import DocParser
-from pairreader.utils import Verboser, LLMNode, RetrievalNode
-from pairreader.prompts_msgs import DISCOVERY_PROMPTS, DISCOVERY_MSGS
-from langchain_core.messages import AIMessage, SystemMessage, HumanMessage, ToolMessage
-from langchain_core.tools import tool, InjectedToolCallId, InjectedToolArg
-from langgraph.prebuilt import InjectedState
-from langgraph.types import interrupt, Command
-from typing import List, Optional, Dict, Any, Annotated
 import asyncio
+
+from langchain_core.messages import AIMessage, HumanMessage
+
+from pairreader.prompts_msgs import DISCOVERY_MSGS, DISCOVERY_PROMPTS
+from pairreader.schemas import PairReaderState
+from pairreader.utils import LLMNode, RetrievalNode, Verboser
+from pairreader.vectorestore import VectorStore
+
 
 class ClusterRetriever(RetrievalNode):
     """
@@ -20,11 +18,11 @@ class ClusterRetriever(RetrievalNode):
     def __init__(
         self,
         vectorstore: VectorStore,
-        n_sample: Optional[int] = None,
-        p_sample: Optional[float] = 0.1,
-        cluster_percentage: Optional[float] = 0.05,
-        min_cluster_size: Optional[int] = None,
-        max_cluster_size: Optional[int] = None,
+        n_sample: int | None = None,
+        p_sample: float | None = 0.1,
+        cluster_percentage: float | None = 0.05,
+        min_cluster_size: int | None = None,
+        max_cluster_size: int | None = None,
         **kwargs
     ):
         super().__init__(vectorstore=vectorstore, **kwargs)
@@ -35,7 +33,7 @@ class ClusterRetriever(RetrievalNode):
         self.max_cluster_size = max_cluster_size
 
     @Verboser(verbosity_level=2)
-    async def __call__(self, state: PairReaderState) -> Dict:
+    async def __call__(self, state: PairReaderState) -> dict:
         """Samples and clusters documents from vectorstore."""
         await self.send(DISCOVERY_MSGS["map_retrieving"])
         sampled_ids = self.vectorstore.get_sample(
@@ -60,7 +58,7 @@ class MapSummarizer(LLMNode):
     - Generates summaries for each cluster in parallel
     """
 
-    async def summarize_cluster(self, cluster, state) -> List:
+    async def summarize_cluster(self, cluster, state) -> list:
         """Summarizes a single cluster of documents using LLM."""
         cluster_docs = '\n'.join([f"doc {i+1}:\n{doc[1]} " for i, doc in enumerate(cluster)])
         prompt = DISCOVERY_PROMPTS["map_summarize_cluster"].format(cluster_docs=cluster_docs)
@@ -70,7 +68,7 @@ class MapSummarizer(LLMNode):
         return [msg, response]
 
     @Verboser(verbosity_level=2)
-    async def __call__(self, state: PairReaderState) -> Dict:
+    async def __call__(self, state: PairReaderState) -> dict:
         """Summarize all clusters in parallel."""
         clusters = state.get("clusters", [])
         await self.send(DISCOVERY_MSGS["map_generating"].format(n_clusters=len(clusters)))
@@ -95,7 +93,7 @@ class ReduceSummarizer(LLMNode):
     """
 
     @Verboser(verbosity_level=2)
-    async def __call__(self, state: PairReaderState) -> Dict:
+    async def __call__(self, state: PairReaderState) -> dict:
         """Reduces cluster summaries into a final overview using LLM."""
         await self.send(DISCOVERY_MSGS["reduce_synthesizing"])
         summaries_text = '\n'.join((f"map-summary {i+1}:\n{s} " for i, s in enumerate(state["cluster_summaries"])))
