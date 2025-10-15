@@ -89,56 +89,54 @@ class TestNodeIntegration:
 # Notes for Future Test Implementation
 # ============================================================================
 
-"""
-Node Testing Strategy:
-
-1. **KnowledgeBaseHandler**:
-   - Test Create command (flushes vectorstore)
-   - Test Update command (appends to vectorstore)
-   - Test file upload handling
-   - Test timeout handling
-
-2. **QADiscoveryRouter** (with Command primitive):
-   - Test routing to QA agent
-   - Test routing to Discovery agent
-   - Test LLM tool selection
-
-3. **QueryOptimizer**:
-   - Test with query_decomposition=True
-   - Test with query_decomposition=False (passthrough)
-   - Test subquery generation
-
-4. **HumanInTheLoopApprover**:
-   - Test interrupt() for user input
-   - Test structured output (HITLDecision)
-   - Test routing decision
-
-5. **InfoRetriever**:
-   - Test vectorstore query
-   - Test document retrieval
-   - Test metadata extraction
-
-6. **InfoSummarizer**:
-   - Test LLM summarization
-   - Test streaming response
-
-7. **ClusterRetriever**:
-   - Test document sampling
-   - Test clustering algorithm
-   - Test cluster parameters
-
-8. **MapSummarizer**:
-   - Test parallel summarization
-   - Test asyncio.gather usage
-
-9. **ReduceSummarizer**:
-   - Test summary combination
-   - Test final output generation
-
-All tests should:
-- Mock Chainlit operations (ask, send, stream)
-- Mock LLM responses
-- Mock vectorstore operations
-- Verify state updates
-- Test error handling
-"""
+# Node Testing Strategy:
+#
+# 1. **KnowledgeBaseHandler**:
+#    - Test Create command (flushes vectorstore)
+#    - Test Update command (appends to vectorstore)
+#    - Test file upload handling
+#    - Test timeout handling
+#
+# 2. **QADiscoveryRouter** (with Command primitive):
+#    - Test routing to QA agent
+#    - Test routing to Discovery agent
+#    - Test LLM tool selection
+#
+# 3. **QueryOptimizer**:
+#    - Test with query_decomposition=True
+#    - Test with query_decomposition=False (passthrough)
+#    - Test subquery generation
+#
+# 4. **HumanInTheLoopApprover**:
+#    - Test interrupt() for user input
+#    - Test structured output (HITLDecision)
+#    - Test routing decision
+#
+# 5. **InfoRetriever**:
+#    - Test vectorstore query
+#    - Test document retrieval
+#    - Test metadata extraction
+#
+# 6. **InfoSummarizer**:
+#    - Test LLM summarization
+#    - Test streaming response
+#
+# 7. **ClusterRetriever**:
+#    - Test document sampling
+#    - Test clustering algorithm
+#    - Test cluster parameters
+#
+# 8. **MapSummarizer**:
+#    - Test parallel summarization
+#    - Test asyncio.gather usage
+#
+# 9. **ReduceSummarizer**:
+#    - Test summary combination
+#    - Test final output generation
+#
+# All tests should:
+# - Mock Chainlit operations (ask, send, stream)
+# - Mock LLM responses
+# - Mock vectorstore operations
+# - Verify state updates
+# - Test error handling
