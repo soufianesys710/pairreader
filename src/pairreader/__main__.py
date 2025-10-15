@@ -1,8 +1,8 @@
+import chainlit as cl
+from chainlit.input_widget import Select, Slider, Switch
+
 from pairreader.agents import PairReaderAgent
 from pairreader.clmemory import InMemoryDataLayer
-from chainlit.input_widget import Select, Switch, Slider
-import chainlit as cl
-
 
 pairreader = PairReaderAgent()
 
@@ -17,19 +17,17 @@ commands = [
         "id": "Create",
         "description": "Create a new knowledge base",
         "icon": "/public/books.png",
-    }
+    },
 ]
 
 
 @cl.password_auth_callback
 def password_auth_callback(username: str, password: str):
     # TODO: user hashed password is to be fetched from database later
-    # TODO: other options can such as OAuth and Header based authentication can be explored in the cl docs 
+    # TODO: other options can such as OAuth and Header based authentication can be explored in the cl docs
     # CHAINLIT_AUTH_SECRET has to be set in the env variables, run `chainlit create-secret` cli to get one.
     if (username, password) == ("admin", "admin"):
-        return cl.User(
-            identifier="admin", metadata={"role": "admin", "provider": "credentials"}
-        )
+        return cl.User(identifier="admin", metadata={"role": "admin", "provider": "credentials"})
     else:
         return None
 
@@ -56,25 +54,19 @@ async def on_chat_start():
             Select(
                 id="LLM",
                 label="LLM",
-                values=[
-                    "anthropic:claude-3-5-haiku-latest",
-                    "anthropic:claude-3-7-sonnet-latest"
-                ],
+                values=["anthropic:claude-3-5-haiku-latest", "anthropic:claude-3-7-sonnet-latest"],
                 initial_index=0,
             ),
             Select(
                 id="Fallback LLM",
                 label="Fallback LLM",
-                values=[
-                    "anthropic:claude-3-5-haiku-latest",
-                    "anthropic:claude-3-7-sonnet-latest"
-                ],
+                values=["anthropic:claude-3-5-haiku-latest", "anthropic:claude-3-7-sonnet-latest"],
                 initial_index=1,
             ),
             Switch(
                 id="query_decomposition",
                 label="Decompose the user query before querying the Knowledge base",
-                initial=True
+                initial=True,
             ),
             Slider(
                 id="n_documents",
@@ -162,6 +154,7 @@ async def on_message(msg: cl.Message):
 def main():
     """Entry point for the pairreader CLI command."""
     from chainlit.cli import run_chainlit
+
     run_chainlit(__file__)
 
 
