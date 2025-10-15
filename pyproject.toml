@@ -22,6 +22,7 @@ dependencies = [
 dev = [
     "jupyter>=1.1.1",
     "notebook>=7.4.5",
+    "pre-commit>=4.3.0",
 ]
 test = [
     "pytest>=8.3.0",
@@ -58,3 +59,36 @@ markers = [
     "slow: Tests that take a long time to run",
 ]
 
+# Ruff - Fast Python linter + formatter (replaces Black, isort, flake8)
+[tool.ruff]
+target-version = "py312"              # Target Python 3.12 syntax
+line-length = 100                     # Max line length before wrapping
+exclude = [                           # Directories to skip
+    ".venv",                          # Virtual environment
+    "__pycache__",                    # Python bytecode
+    ".pytest_cache",                  # Pytest cache
+    ".ruff_cache",                    # Ruff cache
+    "htmlcov",                        # Coverage reports
+    "chroma",                         # Vector store data
+    ".chainlit",                      # Chainlit session data
+    ".files",                         # Uploaded files
+]
+
+[tool.ruff.lint]
+select = [                            # Linting rules to enable
+    "E",                              # PEP 8 errors (indentation, spacing)
+    "W",                              # PEP 8 warnings
+    "F",                              # Pyflakes (undefined vars, unused imports)
+    "I",                              # Import sorting (like isort)
+    "B",                              # Bugbear (likely bugs and anti-patterns)
+    "C4",                             # Better comprehensions
+    "UP",                             # Modern Python syntax upgrades
+]
+ignore = [                            # Rules to skip
+    "E501",                           # Line too long (formatter handles this)
+    "B008",                           # Function calls in defaults (needed for Chainlit)
+    "B904",                           # Raise without 'from' clause
+]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]              # Allow unused imports (re-exports)
