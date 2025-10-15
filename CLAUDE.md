@@ -30,13 +30,53 @@ The application will be available at `http://localhost:8000`
 ### Installing Dependencies
 ```bash
 uv sync                  # Install all dependencies (respects uv.lock)
-uv sync --group dev     # Install with dev dependencies (includes Jupyter)
-uv add <package-name>   # Add a new dependency and update uv.lock
+uv sync --group dev      # Install with dev dependencies (includes Jupyter)
+uv sync --group test     # Install testing dependencies
+uv add <package-name>    # Add a new dependency and update uv.lock
 ```
 
 **Important**:
 - Always use `uv sync --locked` in production/Docker to ensure reproducible builds
 - Build backend is `uv_build`
+
+### Testing
+
+**Running Tests:**
+```bash
+# Run all tests
+uv run pytest
+
+# Run only unit tests (fast)
+uv run pytest -m unit
+
+# Run with coverage report
+uv run pytest --cov=src/pairreader --cov-report=html
+
+# Run specific test file
+uv run pytest tests/test_utils.py
+
+# Run with verbose output
+uv run pytest -v
+
+# Skip slow tests
+uv run pytest -m "not slow"
+```
+
+**Test Structure:**
+- `tests/` - All test files
+- `tests/conftest.py` - Shared fixtures (mocked LLMs, vectorstore, Chainlit, etc.)
+- `tests/test_*.py` - Test modules organized by source module
+- `tests/fixtures/` - Test data and sample files
+
+**Test Markers:**
+- `@pytest.mark.unit` - Fast unit tests for individual components
+- `@pytest.mark.integration` - Integration tests with mocked dependencies
+- `@pytest.mark.slow` - Tests that take longer to run
+
+**Coverage:**
+- Coverage reports are generated in `htmlcov/` directory
+- Open `htmlcov/index.html` in a browser to view detailed coverage
+- Target: 70%+ coverage for core modules
 
 ### Environment Setup
 Create a `.env` file in the project root with the following variables:
