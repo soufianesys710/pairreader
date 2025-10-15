@@ -78,6 +78,37 @@ uv run pytest -m "not slow"
 - Open `htmlcov/index.html` in a browser to view detailed coverage
 - Target: 70%+ coverage for core modules
 
+### Pre-commit Hooks
+
+**Installation:**
+```bash
+uv run pre-commit install   # Install hooks (auto-runs on git commit)
+```
+
+**Manual Execution:**
+```bash
+# Run all hooks
+uv run pre-commit run --all-files
+
+# Run specific hook
+uv run pre-commit run ruff --all-files
+uv run pre-commit run detect-secrets --all-files
+```
+
+**Configured Hooks:**
+- **File hygiene**: trailing-whitespace, end-of-file-fixer, mixed-line-ending
+- **Validation**: check-yaml, check-toml, check-json, check-added-large-files, check-merge-conflict
+- **Python linting**: ruff (auto-fixes bugs, unused imports, style issues)
+- **Python formatting**: ruff-format (spacing, line length, quotes)
+- **Secret detection**: detect-secrets (prevents committing API keys/tokens)
+- **Notebook processing**: nbqa-ruff, nbqa-ruff-format, nbstripout (keeps outputs, strips volatile metadata)
+
+**Important Notes:**
+- Use `# noqa: <code>` comments for intentional violations (e.g., `# noqa: F841` for unused vars)
+- Use `<!-- pragma: allowlist secret -->` for false positive secrets in markdown
+- Secret baseline stored in `.secrets.baseline`
+- Notebooks in `idea/` directory are processed but outputs are preserved for readability
+
 ### Environment Setup
 Create a `.env` file in the project root with the following variables:
 ```bash
