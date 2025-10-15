@@ -3,7 +3,6 @@
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-Open%20Source-green.svg)](LICENSE)
 [![LangGraph](https://img.shields.io/badge/LangGraph-Multi--Agent-orange.svg)](https://langchain-ai.github.io/langgraph/)
-[![Powered by Claude](https://img.shields.io/badge/Powered%20by-Claude-blueviolet.svg)](https://www.anthropic.com/)
 
 A smart document companion that allows you to chat with your books, presentations, notes, and other documents. Upload your files and have conversations with your content using advanced AI capabilities powered by LangGraph and Claude.
 
@@ -193,8 +192,33 @@ uv run chainlit run src/pairreader/__main__.py -w
 
 ### Development Tools
 ```bash
-uv sync --group dev  # Includes Jupyter for experimentation
+uv sync --group dev   # Includes Jupyter for experimentation
+uv sync --group test  # Install testing dependencies
 ```
+
+### Running Tests
+```bash
+# Run all tests
+uv run pytest
+
+# Run only unit tests (fast)
+uv run pytest -m unit
+
+# Run with coverage report
+uv run pytest --cov=src/pairreader --cov-report=html
+
+# Run specific test file
+uv run pytest tests/test_vectorstore.py
+
+# View coverage report
+open htmlcov/index.html
+```
+
+**Test Organization:**
+- `tests/conftest.py` - Shared fixtures (mocked LLMs, vectorstore, Chainlit)
+- `tests/test_*.py` - Test modules organized by source module
+- `tests/fixtures/` - Test data and sample files
+- Markers: `@pytest.mark.unit`, `@pytest.mark.integration`, `@pytest.mark.slow`
 
 ## 📁 Project Structure
 
