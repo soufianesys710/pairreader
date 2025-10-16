@@ -105,5 +105,4 @@ jobs:
           service: '${{ env.SERVICE_NAME_BASE }}-dev'
           region: '${{ env.GAR_LOCATION }}'
           image: '${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ env.SERVICE_NAME_BASE }}-dev:${{ github.sha }}'
-          service_account: 'pairreader-runtime-sa@soufianesys.iam.gserviceaccount.com'
-          flags: "--allow-unauthenticated"
+          flags: "--service-account pairreader-runtime-sa@soufianesys.iam.gserviceaccount.com --allow-unauthenticated"
