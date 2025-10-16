@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+    branches:
+      - 'main'
+
+jobs:
+  env-vars:
+    name: Extract env vars
+    runs-on: ubuntu-latest
+    outputs:
+      PAIRREADER_VERSION: ${{ steps.extract-versions.outputs.PAIRREADER_VERSION }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Extract pairreader version
+        id: extract-versions
+        run: |
+          PAIRREADER_VERSION=$(grep -m 1 '^version = ' pyproject.toml | sed 's/version = "\(.*\)"/\1/')
+          echo "PAIRREADER_VERSION=$PAIRREADER_VERSION" >> $GITHUB_OUTPUT
+
+  pre-commit:
+    name: Pre-commit
+    needs: env-vars
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Set up Python
+        run: uv python install
+
+      - name: Install dependencies
+        run: uv sync --group pre-commit
+
+      - name: run pre-commit
+        run: uv run pre-commit run --all-files
+
+  pytest:
+    name: Unit tests
+    needs:
+      - env-vars
+      - pre-commit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Set up Python
+        run: uv python install
+
+      - name: Install dependencies
+        run: uv sync --group test
+
+      - name: Run unit tests
+        run: uv run pytest -m unit -v
