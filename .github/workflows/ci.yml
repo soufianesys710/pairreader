@@ -40,10 +40,12 @@ jobs:
         run: uv python install
 
       - name: Install dependencies
-        run: uv sync --group pre-commit
+        run: |
+          uv sync --only-group pre-commit
+          uv tree --only-group pre-commit
 
       - name: run pre-commit
-        run: uv run pre-commit run --all-files
+        run: uv run --no-sync pre-commit run --all-files
 
   pytest:
     name: Unit tests
