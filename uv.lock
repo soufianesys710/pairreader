@@ -3797,7 +3797,7 @@ wheels = [
 
 [[package]]
 name = "pairreader"
-version = "0.1.11"
+version = "0.1.12"
 source = { editable = "." }
 dependencies = [
     { name = "chainlit" },
@@ -3814,6 +3814,8 @@ dependencies = [
 dev = [
     { name = "jupyter" },
     { name = "notebook" },
+]
+pre-commit = [
     { name = "pre-commit" },
 ]
 test = [
@@ -3840,8 +3842,8 @@ requires-dist = [
 dev = [
     { name = "jupyter", specifier = ">=1.1.1" },
     { name = "notebook", specifier = ">=7.4.5" },
-    { name = "pre-commit", specifier = ">=4.3.0" },
 ]
+pre-commit = [{ name = "pre-commit", specifier = ">=4.3.0" }]
 test = [
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "pytest", specifier = ">=8.3.0" },

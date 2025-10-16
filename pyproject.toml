@@ -1,6 +1,6 @@
 [project]
 name = "pairreader"
-version = "0.1.11"
+version = "0.1.12"
 description = "Your pair reader through your books, presentations, notes and more"
 readme = "README.md"
 authors = [
@@ -22,7 +22,6 @@ dependencies = [
 dev = [
     "jupyter>=1.1.1",
     "notebook>=7.4.5",
-    "pre-commit>=4.3.0",
 ]
 test = [
     "pytest>=8.3.0",
@@ -30,6 +29,9 @@ test = [
     "pytest-cov>=6.0.0",
     "pytest-mock>=3.14.0",
     "httpx>=0.28.1",
+]
+pre-commit = [
+    "pre-commit>=4.3.0",
 ]
 
 [project.scripts]
